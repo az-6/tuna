@@ -12,6 +12,7 @@ export const EmployeeAccountModal: React.FC<EmployeeAccountModalProps> = ({ isOp
   const { createEmployee, profile } = useApp();
   const modalRef = useRef<HTMLDivElement | null>(null);
   const firstInputRef = useRef<HTMLInputElement | null>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
@@ -22,7 +23,19 @@ export const EmployeeAccountModal: React.FC<EmployeeAccountModalProps> = ({ isOp
 
   useEffect(() => {
     if (!isOpen) return;
-    window.setTimeout(() => firstInputRef.current?.focus(), 50);
+    returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusTimer = window.setTimeout(() => firstInputRef.current?.focus(), 50);
+    return () => {
+      window.clearTimeout(focusTimer);
+      const returnTarget = returnFocusRef.current;
+      window.requestAnimationFrame(() => {
+        if (returnTarget?.isConnected) returnTarget.focus();
+      });
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !busy) onClose();
       if (event.key !== 'Tab' || !modalRef.current) return;
@@ -98,7 +111,7 @@ export const EmployeeAccountModal: React.FC<EmployeeAccountModalProps> = ({ isOp
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-end justify-center bg-black/85 p-0 backdrop-blur-sm sm:items-center sm:p-4"
+      className="fixed inset-0 z-[70] flex items-end justify-center overflow-y-auto overscroll-contain bg-black/85 p-0 backdrop-blur-sm sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="employee-account-title"
@@ -106,7 +119,7 @@ export const EmployeeAccountModal: React.FC<EmployeeAccountModalProps> = ({ isOp
         if (event.target === event.currentTarget && !busy) onClose();
       }}
     >
-      <div ref={modalRef} className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-t-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl sm:rounded-2xl sm:p-6">
+      <div ref={modalRef} className="max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl sm:max-h-[calc(100dvh-2rem)] sm:rounded-2xl sm:p-6">
         <div className="flex items-start justify-between gap-4 border-b border-slate-800 pb-4">
           <div className="min-w-0">
             <h2 id="employee-account-title" className="flex items-center gap-2 text-lg font-extrabold text-white">

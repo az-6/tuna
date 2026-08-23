@@ -527,7 +527,7 @@ export const Step3HitungHpp: React.FC = () => {
               value={reopenReason}
               onChange={event => setReopenReason(event.target.value)}
               placeholder="Alasan koreksi (wajib untuk audit trail)"
-              className="min-h-[44px] rounded-xl border border-emerald-500/30 bg-slate-950 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus-ring"
+              className="min-h-[44px] rounded-xl border border-emerald-500/30 bg-slate-950 px-3 py-2 text-sm text-white placeholder:text-slate-400 focus-ring"
             />
             <button
               type="button"

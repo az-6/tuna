@@ -362,14 +362,14 @@ export const Step2MejaPotong: React.FC = () => {
         </div>
 
         {/* Sort Selector */}
-        <div className="flex items-center gap-2 w-full sm:w-auto bg-slate-950 px-3 py-2 rounded-xl border border-slate-800 text-xs min-h-[44px]">
+        <div className="flex min-h-[44px] w-full items-center gap-2 rounded-xl border border-slate-800 bg-slate-950 px-3 text-xs sm:w-auto">
           <ArrowUpDown className="w-4 h-4 text-cyan-400 shrink-0" aria-hidden="true" />
           <label htmlFor="sort-fish-select" className="text-slate-300 font-medium shrink-0 hidden sm:inline-block">Urutan:</label>
           <select
             id="sort-fish-select"
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as SortOption)}
-            className="bg-transparent text-cyan-300 font-bold focus:outline-none cursor-pointer text-xs w-full sm:w-auto truncate"
+            className="min-h-[44px] w-full cursor-pointer truncate bg-transparent text-xs font-bold text-cyan-300 focus:outline-none sm:w-auto"
           >
             <option value="STATUS_PENDING_FIRST" className="bg-slate-900 text-white">⏳ Belum Dipotong Dulu</option>
             <option value="NO_ASC" className="bg-slate-900 text-white">🔢 No. Ikan Naik</option>
@@ -619,10 +619,10 @@ export const Step2MejaPotong: React.FC = () => {
                                 placeholder="0.00"
                                 value={loin.weight > 0 ? loin.weight : ''}
                                 onChange={(e) => handleLoinChange(loin.id, 'weight', Math.max(0, parseFloat(e.target.value) || 0))}
-                                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 sm:py-2.5 text-lg font-black text-cyan-300 font-mono tabular-nums focus-ring min-h-[48px]"
+                                className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-4 pr-16 py-3 sm:py-2.5 text-lg font-black text-cyan-300 font-mono tabular-nums focus-ring min-h-[48px]"
                                 aria-label={`Berat timbangan ${plainLoinName} dalam kilogram`}
                               />
-                              <span className="absolute right-4 top-3.5 text-xs text-slate-400 font-extrabold font-mono pointer-events-none">
+                              <span className="absolute right-10 top-3.5 text-xs text-slate-400 font-extrabold font-mono pointer-events-none">
                                 KG
                               </span>
                             </div>

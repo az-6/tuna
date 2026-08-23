@@ -107,10 +107,22 @@ export const AppContent: React.FC = () => {
         </div>
       </nav>
 
-      {/* Footer — hidden on mobile (behind bottom nav anyway) */}
-      <footer className="hidden sm:block bg-slate-900 border-t border-slate-800/80 py-4 text-center text-xs text-slate-400 no-print">
+      {/* Footer remains reachable above the fixed mobile navigation. */}
+      <footer className="block bg-slate-900 border-t border-slate-800/80 py-4 text-center text-xs text-slate-400 no-print">
         <div className="max-w-5xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>KTG Tuna Operations &bull; Sistem Lapangan Penerimaan, Meja Potong & HPP B2B</span>
+          <div className="min-w-0 space-y-1 text-center sm:text-left">
+            <p>KTG Tuna Operations &bull; Sistem Lapangan Penerimaan, Meja Potong & HPP B2B</p>
+            <p>
+              Jika ada error atau pertanyaan, hubungi{' '}
+              <a
+                href="tel:+6281214450806"
+                className="rounded-sm font-bold text-cyan-300 underline decoration-cyan-500/60 underline-offset-4 transition-colors hover:text-cyan-200 focus-ring"
+                aria-label="Hubungi dukungan di 081214450806"
+              >
+                081214450806
+              </a>
+            </p>
+          </div>
           <span className="text-slate-300 font-mono text-[11px]">Versi Mobile First 2026</span>
         </div>
       </footer>

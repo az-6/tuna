@@ -404,11 +404,11 @@ export const Step1IkanMasuk: React.FC = () => {
                   setBeratUtuh(e.target.value);
                   if (errorMessage) setErrorMessage(null);
                 }}
-                className="w-full bg-slate-950 border-2 border-slate-700 focus:border-cyan-400 rounded-2xl px-4 py-3.5 sm:py-4 text-2xl sm:text-3xl font-black text-cyan-300 font-mono focus-ring tabular-nums placeholder:text-slate-700 min-h-[56px]"
+                className="w-full bg-slate-950 border-2 border-slate-700 focus:border-cyan-400 rounded-2xl pl-4 pr-16 py-3.5 sm:py-4 text-2xl sm:text-3xl font-black text-cyan-300 font-mono focus-ring tabular-nums placeholder:text-slate-400 min-h-[56px]"
                 autoFocus
                 required
               />
-              <span className="absolute right-4 top-4 text-sm font-extrabold text-slate-500 font-mono pointer-events-none">
+              <span className="absolute right-10 top-4 text-sm font-extrabold text-slate-400 font-mono pointer-events-none">
                 KG
               </span>
             </div>
@@ -487,7 +487,7 @@ export const Step1IkanMasuk: React.FC = () => {
           <div className="text-center py-8 px-4 bg-slate-950/60 rounded-xl border border-slate-800/80">
             <Scale className="w-10 h-10 text-slate-600 mx-auto mb-2" aria-hidden="true" />
             <p className="text-xs sm:text-sm text-slate-300 font-medium">Belum ada timbangan ikan pada batch ini.</p>
-            <p className="text-[11px] text-slate-500 mt-1">Masukkan kilogram timbangan di atas untuk mulai mendata.</p>
+            <p className="text-[11px] text-slate-400 mt-1">Masukkan kilogram timbangan di atas untuk mulai mendata.</p>
           </div>
         ) : (
           <>

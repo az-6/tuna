@@ -90,10 +90,22 @@ body {
   *,
   *::before,
   *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
     scroll-behavior: auto !important;
+  }
+
+  .animate-in {
+    animation: none !important;
+  }
+
+  .animate-spin {
+    animation: reduced-loading-pulse 1.5s ease-in-out infinite !important;
+  }
+
+  @keyframes reduced-loading-pulse {
+    0%, 100% { opacity: 0.55; }
+    50% { opacity: 1; }
   }
 }
 

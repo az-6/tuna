@@ -149,6 +149,7 @@ export const SimpleNavbar: React.FC = () => {
   const finishedCount = (activeBatchFish || []).filter(f => f.status === 'done').length;
 
   return (
+    <>
     <header className="bg-slate-900/95 backdrop-blur-md border-b border-slate-800 sticky top-0 z-30 shadow-lg no-print">
       <div className="max-w-5xl mx-auto px-2.5 sm:px-6">
 
@@ -179,20 +180,20 @@ export const SimpleNavbar: React.FC = () => {
             <button
               type="button"
               onClick={() => void signOut()}
-              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-slate-700 bg-slate-950 text-slate-300 sm:hidden focus-ring"
+              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-slate-700 bg-slate-950 text-slate-300 lg:hidden focus-ring"
               aria-label={`Keluar dari akun ${profile?.displayName || ''}`}
             >
               <LogOut className="h-4 w-4" aria-hidden="true" />
             </button>
             {/* Quick Nelayan Switcher */}
-            <div className="relative hidden sm:flex items-center bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs min-h-[44px]">
+            <div className="relative hidden min-h-[44px] items-center rounded-xl border border-slate-700 bg-slate-950 px-2.5 text-xs lg:flex">
               <Ship className="w-4 h-4 text-cyan-400 shrink-0 mr-1.5" aria-hidden="true" />
               <label htmlFor="batch-select" className="sr-only">Pilih Nelayan atau Batch</label>
               <select
                 id="batch-select"
                 value={activeBatchId}
                 onChange={(e) => setActiveBatchId(e.target.value)}
-                className="bg-transparent text-cyan-300 font-bold focus:outline-none cursor-pointer text-xs max-w-[95px] sm:max-w-[180px] truncate touch-manipulation"
+                className="min-h-[44px] max-w-[180px] cursor-pointer truncate bg-transparent text-xs font-bold text-cyan-300 touch-manipulation focus:outline-none"
               >
                 {batches.map(b => (
                   <option key={b.id} value={b.id} className="bg-slate-900 text-white">
@@ -206,7 +207,7 @@ export const SimpleNavbar: React.FC = () => {
             <button
               onClick={openPackagingModal}
               disabled={batches.length === 0}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-2 bg-purple-950/80 hover:bg-purple-900 disabled:cursor-not-allowed disabled:opacity-40 text-purple-300 border border-purple-500/40 rounded-xl text-xs font-bold transition-all shadow-sm touch-manipulation focus-ring min-h-[44px]"
+              className="hidden min-h-[44px] items-center gap-1.5 rounded-xl border border-purple-500/40 bg-purple-950/80 px-3 py-2 text-xs font-bold text-purple-300 shadow-sm transition-all hover:bg-purple-900 disabled:cursor-not-allowed disabled:opacity-40 touch-manipulation focus-ring lg:flex"
               aria-label="Catat Pemakaian & Biaya Kemasan Batch"
               title="Catat Pemakaian & Biaya Kemasan Batch"
             >
@@ -218,7 +219,7 @@ export const SimpleNavbar: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowEmployeeModal(true)}
-                className="hidden sm:flex min-h-[44px] items-center gap-1.5 rounded-xl border border-cyan-500/40 bg-cyan-950/70 px-3 py-2 text-xs font-bold text-cyan-200 transition-colors hover:bg-cyan-900 focus-ring"
+                className="hidden min-h-[44px] items-center gap-1.5 rounded-xl border border-cyan-500/40 bg-cyan-950/70 px-3 py-2 text-xs font-bold text-cyan-200 transition-colors hover:bg-cyan-900 focus-ring lg:flex"
                 aria-label="Buat akun pegawai"
                 title="Buat akun pegawai"
               >
@@ -236,7 +237,7 @@ export const SimpleNavbar: React.FC = () => {
                 setBatchCode(`BATCH-${getJakartaDateString().replace(/-/g, '')}-${String(batches.length + 1).padStart(2, '0')}`);
                 setShowAddModal(true);
               }}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-40 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-cyan-600/30 touch-manipulation focus-ring min-h-[44px]"
+              className="hidden min-h-[44px] items-center gap-1.5 rounded-xl bg-cyan-600 px-3 py-2 text-xs font-bold text-white shadow-md shadow-cyan-600/30 transition-all hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-40 touch-manipulation focus-ring lg:flex"
               aria-label="Tambah Nelayan atau Kapal Baru"
             >
               <Plus className="w-4 h-4" />
@@ -248,7 +249,7 @@ export const SimpleNavbar: React.FC = () => {
               ref={resetTriggerRef}
               onClick={() => setShowResetConfirm(true)}
               disabled={!canManageFinancials || batches.every(batch => batch.lifecycleStatus === 'FINAL')}
-              className="hidden sm:flex p-2.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40 rounded-xl text-xs transition-colors touch-manipulation focus-ring min-h-[44px] min-w-[44px] items-center justify-center"
+              className="hidden min-h-[44px] min-w-[44px] items-center justify-center rounded-xl p-2.5 text-xs text-slate-400 transition-colors hover:bg-slate-800 hover:text-rose-400 disabled:cursor-not-allowed disabled:opacity-40 touch-manipulation focus-ring lg:flex"
               aria-label="Reset atau Kosongkan Data"
               title="Kosongkan Data"
             >
@@ -258,7 +259,7 @@ export const SimpleNavbar: React.FC = () => {
             <button
               type="button"
               onClick={() => void signOut()}
-              className="hidden sm:flex min-h-[44px] items-center gap-2 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-left text-xs text-slate-300 transition-colors hover:border-slate-600 hover:text-white focus-ring"
+              className="hidden min-h-[44px] items-center gap-2 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-left text-xs text-slate-300 transition-colors hover:border-slate-600 hover:text-white focus-ring lg:flex"
               aria-label={`Keluar dari akun ${profile?.displayName || ''}`}
               title="Keluar"
             >
@@ -273,11 +274,11 @@ export const SimpleNavbar: React.FC = () => {
         </div>
 
         {/* Mobile action bar keeps primary controls reachable without horizontal overflow. */}
-        <div className={`grid gap-1.5 pb-2.5 sm:hidden ${profile?.role === 'owner' ? 'grid-cols-[minmax(0,1fr)_44px_44px_44px]' : canManageFinancials ? 'grid-cols-[minmax(0,1fr)_44px_44px]' : 'grid-cols-[minmax(0,1fr)_44px]'}`}>
+        <div className={`grid gap-1.5 pb-2.5 lg:hidden ${profile?.role === 'owner' ? 'grid-cols-[minmax(0,1fr)_44px_44px_44px]' : canManageFinancials ? 'grid-cols-[minmax(0,1fr)_44px_44px]' : 'grid-cols-[minmax(0,1fr)_44px]'}`}>
           <div className="relative flex min-h-[44px] min-w-0 items-center rounded-xl border border-slate-700 bg-slate-950 px-2.5 text-xs">
             <Ship className="me-1.5 h-4 w-4 shrink-0 text-cyan-400" aria-hidden="true" />
             <label htmlFor="mobile-batch-select" className="sr-only">Pilih batch</label>
-            <select id="mobile-batch-select" value={activeBatchId} onChange={event => setActiveBatchId(event.target.value)} className="min-w-0 flex-1 truncate bg-transparent font-bold text-cyan-300 focus:outline-none">
+            <select id="mobile-batch-select" value={activeBatchId} onChange={event => setActiveBatchId(event.target.value)} className="min-h-[44px] min-w-0 flex-1 truncate bg-transparent font-bold text-cyan-300 focus:outline-none">
               {batches.map(batch => <option key={batch.id} value={batch.id} className="bg-slate-900 text-white">{batch.nelayan}</option>)}
             </select>
           </div>
@@ -350,11 +351,13 @@ export const SimpleNavbar: React.FC = () => {
         </nav>
 
       </div>
+    </header>
 
+      {/* Modal berada di luar sticky header agar position: fixed mengacu ke viewport desktop. */}
       {/* Modal: Tambah Nelayan / Batch Baru */}
       {showAddModal && (
         <div
-          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+          className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto overscroll-contain bg-black/80 p-0 backdrop-blur-sm sm:items-center sm:p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="modal-nelayan-title"
@@ -365,7 +368,7 @@ export const SimpleNavbar: React.FC = () => {
             }
           }}
         >
-          <div ref={addModalRef} className="bg-slate-900 border-t sm:border border-slate-700 rounded-t-2xl sm:rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-2xl animate-in fade-in">
+          <div ref={addModalRef} className="max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-2xl border-t border-slate-700 bg-slate-900 p-5 shadow-2xl animate-in fade-in sm:max-h-[calc(100dvh-2rem)] sm:rounded-2xl sm:border sm:p-6">
             <h2 id="modal-nelayan-title" className="text-base sm:text-lg font-bold text-white mb-1 flex items-center gap-2">
               <Ship className="w-5 h-5 text-cyan-400" aria-hidden="true" />
               Tambah Kapal / Nelayan Baru
@@ -432,7 +435,7 @@ export const SimpleNavbar: React.FC = () => {
       {/* Modal: Konfirmasi Kosongkan / Reset Data */}
       {showResetConfirm && (
         <div
-          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+          className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto overscroll-contain bg-black/80 p-0 backdrop-blur-sm sm:items-center sm:p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="modal-reset-title"
@@ -443,7 +446,7 @@ export const SimpleNavbar: React.FC = () => {
             }
           }}
         >
-          <div ref={resetModalRef} className="bg-slate-900 border-t sm:border border-rose-600/50 rounded-t-2xl sm:rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-2xl animate-in fade-in">
+          <div ref={resetModalRef} className="max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-2xl border-t border-rose-600/50 bg-slate-900 p-5 shadow-2xl animate-in fade-in sm:max-h-[calc(100dvh-2rem)] sm:rounded-2xl sm:border sm:p-6">
             <h2 id="modal-reset-title" className="text-base sm:text-lg font-bold text-rose-400 mb-1">
               ⚠️ Kosongkan Semua Data?
             </h2>
@@ -477,6 +480,6 @@ export const SimpleNavbar: React.FC = () => {
 
       <EmployeeAccountModal isOpen={showEmployeeModal} onClose={() => setShowEmployeeModal(false)} />
 
-    </header>
+    </>
   );
 };

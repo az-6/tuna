@@ -14,6 +14,7 @@ export const BatchPackagingModal: React.FC<BatchPackagingModalProps> = ({ isOpen
 
   const modalRef = useRef<HTMLDivElement | null>(null);
   const firstInputRef = useRef<HTMLInputElement | null>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
 
   // Defensive fallback for activeBatch
   const currentBatch = activeBatch || {
@@ -82,16 +83,29 @@ export const BatchPackagingModal: React.FC<BatchPackagingModalProps> = ({ isOpen
 
   const [saveAlert, setSaveAlert] = useState(false);
 
+  // Initial focus and focus restoration when the dialog closes.
+  useEffect(() => {
+    if (!isOpen) return;
+    returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusTimer = window.setTimeout(() => firstInputRef.current?.focus(), 50);
+    return () => {
+      window.clearTimeout(focusTimer);
+      const returnTarget = returnFocusRef.current;
+      window.requestAnimationFrame(() => {
+        if (returnTarget?.isConnected) returnTarget.focus();
+      });
+    };
+  }, [isOpen]);
+
   // Focus trap & Escape key handler
   useEffect(() => {
     if (isOpen) {
-      setTimeout(() => firstInputRef.current?.focus(), 50);
       const handleKeyDown = (e: KeyboardEvent) => {
         if (e.key === 'Escape') {
           onClose();
         } else if (e.key === 'Tab' && modalRef.current) {
           const focusable = modalRef.current.querySelectorAll<HTMLElement>(
-            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
           );
           if (focusable.length === 0) return;
           const first = focusable[0];
@@ -341,7 +355,7 @@ export const BatchPackagingModal: React.FC<BatchPackagingModalProps> = ({ isOpen
               </h2>
             </div>
             <p className="text-xs text-slate-300 mt-0.5 font-mono">
-              Batch: <strong className="text-cyan-300">{currentBatch.nelayan}</strong> &bull; {currentBatch.id}
+              Batch: <strong className="text-cyan-300">{currentBatch.nelayan}</strong> &bull; {currentBatch.code || currentBatch.id.slice(0, 8)}
             </p>
           </div>
           <button
@@ -693,7 +707,7 @@ export const BatchPackagingModal: React.FC<BatchPackagingModalProps> = ({ isOpen
                     placeholder="Contoh: Segel Pengaman"
                     value={newMatName}
                     onChange={(e) => setNewMatName(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2.5 text-xs text-white focus-ring placeholder:text-slate-600 min-h-[44px]"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2.5 text-xs text-white focus-ring placeholder:text-slate-400 min-h-[44px]"
                   />
                 </div>
 
@@ -705,7 +719,7 @@ export const BatchPackagingModal: React.FC<BatchPackagingModalProps> = ({ isOpen
                     placeholder="pcs / roll"
                     value={newMatUnit}
                     onChange={(e) => setNewMatUnit(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2.5 text-xs text-white focus-ring font-mono placeholder:text-slate-600 min-h-[44px]"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2.5 text-xs text-white focus-ring font-mono placeholder:text-slate-400 min-h-[44px]"
                   />
                 </div>
 
@@ -719,7 +733,7 @@ export const BatchPackagingModal: React.FC<BatchPackagingModalProps> = ({ isOpen
                     placeholder="Rp"
                     value={newMatPrice}
                     onChange={(e) => setNewMatPrice(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2.5 text-xs text-white font-mono focus-ring tabular-nums placeholder:text-slate-600 min-h-[44px]"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2.5 text-xs text-white font-mono focus-ring tabular-nums placeholder:text-slate-400 min-h-[44px]"
                   />
                 </div>
 
@@ -733,7 +747,7 @@ export const BatchPackagingModal: React.FC<BatchPackagingModalProps> = ({ isOpen
                     placeholder="Qty"
                     value={newMatQty}
                     onChange={(e) => setNewMatQty(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2.5 text-xs text-white font-mono focus-ring tabular-nums placeholder:text-slate-600 min-h-[44px]"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2.5 text-xs text-white font-mono focus-ring tabular-nums placeholder:text-slate-400 min-h-[44px]"
                   />
                 </div>
               </div>

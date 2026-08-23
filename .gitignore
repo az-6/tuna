@@ -16,6 +16,7 @@ dist-ssr
 !.env.example
 .vercel
 .supabase
+supabase/.temp/
 
 # Editor directories and files
 .vscode/*
@@ -31,3 +32,6 @@ dist-ssr
 # Antigravity / Gemini internal directories
 .gemini
 .agents
+
+.vercel
+.env*
