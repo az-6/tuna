@@ -5,17 +5,20 @@ import { Step1IkanMasuk } from './components/Step1IkanMasuk';
 import { Step2MejaPotong } from './components/Step2MejaPotong';
 import { Step3HitungHpp } from './components/Step3HitungHpp';
 import { BatchPackagingModal } from './components/BatchPackagingModal';
-import { Inbox, Scissors, Calculator } from 'lucide-react';
+import { SystemGate } from './components/SystemGate';
+import { Inbox, Scissors, Calculator, LockKeyhole, PlusCircle } from 'lucide-react';
 
 export const AppContent: React.FC = () => {
-  const { 
-    activeTab, 
-    setActiveTab, 
-    activeBatchFish, 
-    showPackagingModal, 
-    closePackagingModal 
+  const {
+    activeTab,
+    setActiveTab,
+    activeBatchFish,
+    batches,
+    canViewHpp,
+    showPackagingModal,
+    closePackagingModal
   } = useApp();
-  
+
   const finishedCount = (activeBatchFish || []).filter(f => f.status === 'done').length;
 
   return (
@@ -25,14 +28,26 @@ export const AppContent: React.FC = () => {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-5xl w-full mx-auto px-2.5 sm:px-6 py-3 sm:py-6" id="main-content">
-        {activeTab === 'masuk' && <Step1IkanMasuk />}
-        {activeTab === 'proses' && <Step2MejaPotong />}
-        {activeTab === 'hpp' && <Step3HitungHpp />}
+        {batches.length === 0 ? (
+          <section className="mx-auto mt-8 max-w-lg rounded-2xl border border-slate-800 bg-slate-900 p-6 text-center shadow-xl">
+            <PlusCircle className="mx-auto h-10 w-10 text-cyan-400" aria-hidden="true" />
+            <h1 className="mt-3 text-xl font-extrabold text-white">Belum ada batch produksi</h1>
+            <p className="mt-2 text-sm leading-relaxed text-slate-300">
+              Buat batch pertama melalui tombol <strong>Nelayan Baru</strong> di atas. Data akan langsung tersimpan di Supabase.
+            </p>
+          </section>
+        ) : (
+          <>
+            {activeTab === 'masuk' && <Step1IkanMasuk />}
+            {activeTab === 'proses' && <Step2MejaPotong />}
+            {activeTab === 'hpp' && <Step3HitungHpp />}
+          </>
+        )}
       </main>
 
       {/* Mobile Fixed Bottom Navigation — safe area for notched phones */}
-      <nav 
-        aria-label="Navigasi Utama Mobile" 
+      <nav
+        aria-label="Navigasi Utama Mobile"
         className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 shadow-2xl px-2 pt-1.5 pb-1.5 safe-bottom no-print"
       >
         <div className="grid grid-cols-3 gap-1 max-w-md mx-auto">
@@ -85,7 +100,7 @@ export const AppContent: React.FC = () => {
             aria-current={activeTab === 'hpp' ? 'page' : undefined}
           >
             <div className="relative">
-              <Calculator className="w-5 h-5" />
+              {canViewHpp ? <Calculator className="w-5 h-5" /> : <LockKeyhole className="w-5 h-5" />}
             </div>
             <span className="mt-1 text-[11px] font-semibold">3. HPP</span>
           </button>
@@ -102,7 +117,7 @@ export const AppContent: React.FC = () => {
 
       {/* Root-Level Single Instance Packaging Modal (Avoids backdrop-blur stacking context bug) */}
       <BatchPackagingModal
-        isOpen={showPackagingModal}
+        isOpen={showPackagingModal && batches.length > 0}
         onClose={closePackagingModal}
       />
     </div>
@@ -110,5 +125,9 @@ export const AppContent: React.FC = () => {
 };
 
 export default function App() {
-  return <AppContent />;
+  return (
+    <SystemGate>
+      <AppContent />
+    </SystemGate>
+  );
 }

@@ -2,31 +2,31 @@ import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { FishGrade, LoinItem, FishRecord } from '../types';
 import { formatKg, formatPercent } from '../utils/calculations';
-import { 
-  Scissors, 
-  ChevronDown, 
-  ChevronUp, 
-  CheckCircle2, 
-  ArrowRight, 
-  ArrowUpDown, 
+import {
+  Scissors,
+  ChevronDown,
+  ChevronUp,
+  CheckCircle2,
+  ArrowRight,
+  ArrowUpDown,
   AlertCircle,
   Plus,
   Trash2,
   Package
 } from 'lucide-react';
 
-type SortOption = 
-  | 'NO_ASC' 
-  | 'NO_DESC' 
-  | 'WEIGHT_DESC' 
-  | 'WEIGHT_ASC' 
+type SortOption =
+  | 'NO_ASC'
+  | 'NO_DESC'
+  | 'WEIGHT_DESC'
+  | 'WEIGHT_ASC'
   | 'STATUS_PENDING_FIRST';
 
 export const Step2MejaPotong: React.FC = () => {
-  const { 
-    activeBatch, 
-    activeBatchFish, 
-    updateFishLoins, 
+  const {
+    activeBatch,
+    activeBatchFish,
+    updateFishLoins,
     updateFishRecord,
     setActiveTab,
     openPackagingModal
@@ -37,15 +37,37 @@ export const Step2MejaPotong: React.FC = () => {
   const [sortBy, setSortBy] = useState<SortOption>('STATUS_PENDING_FIRST');
 
   // Expanded accordion state
-  const [expandedFishId, setExpandedFishId] = useState<string | null>(
-    activeBatchFish.find(f => f.status === 'pending')?.id || activeBatchFish[0]?.id || null
-  );
+  const [expandedFishId, setExpandedFishId] = useState<string | null>(() => {
+    return activeBatchFish.find(f => f.status === 'pending')?.id || activeBatchFish[0]?.id || null;
+  });
+
+  // Helper to initialize local loins from a fish record
+  const getInitialLoinsForFish = (fish: FishRecord): LoinItem[] => {
+    const defaultG = fish.gradePotong || fish.gradeNota;
+    return fish.loins && fish.loins.length > 0
+      ? fish.loins.map((l, i) => ({
+          id: l.id || i + 1,
+          name: `Loin ${l.id || i + 1}`,
+          weight: Math.max(0, l.weight || 0),
+          grade: l.grade || defaultG
+        }))
+      : [
+          { id: 1, name: "Loin 1", weight: 0, grade: defaultG },
+          { id: 2, name: "Loin 2", weight: 0, grade: defaultG },
+          { id: 3, name: "Loin 3", weight: 0, grade: defaultG },
+          { id: 4, name: "Loin 4", weight: 0, grade: defaultG },
+        ];
+  };
 
   // Temporary local state for active editing fish
-  const [localLoins, setLocalLoins] = useState<LoinItem[]>([]);
+  const [localLoins, setLocalLoins] = useState<LoinItem[]>(() => {
+    const initialFish = activeBatchFish.find(f => f.status === 'pending') || activeBatchFish[0];
+    return initialFish ? getInitialLoinsForFish(initialFish) : [];
+  });
+
   const [errorValidation, setErrorValidation] = useState<string | null>(null);
 
-  // Initialize or toggle accordion
+  // Synchronize localLoins when expanded fish changes
   const handleToggleExpand = (fish: FishRecord) => {
     if (expandedFishId === fish.id) {
       setExpandedFishId(null);
@@ -53,33 +75,21 @@ export const Step2MejaPotong: React.FC = () => {
     } else {
       setExpandedFishId(fish.id);
       setErrorValidation(null);
-      const defaultG = fish.gradePotong || fish.gradeNota;
-      setLocalLoins(
-        fish.loins && fish.loins.length > 0 
-          ? fish.loins.map((l, i) => ({
-              id: l.id || i + 1,
-              name: `Loin ${l.id || i + 1}`,
-              weight: l.weight || 0,
-              grade: l.grade || defaultG
-            }))
-          : [
-              { id: 1, name: "Loin 1", weight: 0, grade: defaultG },
-              { id: 2, name: "Loin 2", weight: 0, grade: defaultG },
-              { id: 3, name: "Loin 3", weight: 0, grade: defaultG },
-              { id: 4, name: "Loin 4", weight: 0, grade: defaultG },
-            ]
-      );
+      setLocalLoins(getInitialLoinsForFish(fish));
     }
   };
 
   // Change weight or grade of a single loin
   const handleLoinChange = (id: number, field: 'weight' | 'grade', value: any) => {
-    setLocalLoins(prev => prev.map(l => l.id === id ? { ...l, [field]: value } : l));
+    if (activeBatch.lifecycleStatus === 'FINAL') return;
+    const safeVal = field === 'weight' ? Math.max(0, parseFloat(value) || 0) : value;
+    setLocalLoins(prev => prev.map(l => l.id === id ? { ...l, [field]: safeVal } : l));
     if (errorValidation) setErrorValidation(null);
   };
 
   // Add a new loin to this fish (e.g. Loin 5, Loin 6...)
   const handleAddLoin = (defaultGrade: FishGrade) => {
+    if (activeBatch.lifecycleStatus === 'FINAL') return;
     setLocalLoins(prev => {
       const nextId = prev.length + 1;
       return [
@@ -92,6 +102,7 @@ export const Step2MejaPotong: React.FC = () => {
 
   // Remove a loin from this fish
   const handleRemoveLoin = (id: number) => {
+    if (activeBatch.lifecycleStatus === 'FINAL') return;
     if (localLoins.length <= 1) return;
     setLocalLoins(prev => {
       const filtered = prev.filter(l => l.id !== id);
@@ -106,8 +117,9 @@ export const Step2MejaPotong: React.FC = () => {
 
   // Change overall fish grade (Meja potong re-inspection: e.g. Grade C -> Grade B)
   const handleChangeFishGrade = (fishId: string, newGrade: FishGrade) => {
+    if (activeBatch.lifecycleStatus === 'FINAL') return;
     // 1. Update gradePotong in global context (preserves original purchase gradeNota)
-    updateFishRecord(fishId, { gradePotong: newGrade });
+    void updateFishRecord(fishId, { gradePotong: newGrade }).catch(() => undefined);
 
     // 2. Automatically update local loins default grade to match new evaluation
     setLocalLoins(prev => prev.map(l => ({ ...l, grade: newGrade })));
@@ -115,47 +127,62 @@ export const Step2MejaPotong: React.FC = () => {
   };
 
   // Save loins and mark done
-  const handleSaveFishLoins = (fishId: string) => {
+  const handleSaveFishLoins = async (fishId: string) => {
+    if (activeBatch.lifecycleStatus === 'FINAL') return;
+    const fish = activeBatchFish.find(f => f.id === fishId);
     const totalWeight = localLoins.reduce((sum, l) => sum + (l.weight || 0), 0);
     if (totalWeight <= 0) {
       setErrorValidation('Silakan isi timbangan setidaknya pada salah satu Loin!');
       return;
     }
+
+    if (fish && totalWeight > fish.beratUtuh) {
+      setErrorValidation(`Ditolak: Total berat loin (${totalWeight.toFixed(2)} kg) melebihi berat utuh ikan (${fish.beratUtuh.toFixed(2)} kg). Rendemen fisik maksimal adalah 100%. Silakan periksa kembali timbangan.`);
+      return;
+    }
+
     setErrorValidation(null);
     const normalizedLoins = localLoins.map((l, i) => ({
       ...l,
-      name: `Loin ${l.id || i + 1}`
+      name: `Loin ${l.id || i + 1}`,
+      weight: Math.max(0, l.weight || 0)
     }));
-    updateFishLoins(fishId, normalizedLoins, 'done');
-    
+    try {
+      await updateFishLoins(fishId, normalizedLoins, 'done');
+    } catch {
+      return;
+    }
+
     // Auto expand next pending fish for smooth field tallying
     const nextPending = activeBatchFish.find(f => f.id !== fishId && f.status === 'pending');
     if (nextPending) {
-      handleToggleExpand(nextPending);
+      setExpandedFishId(nextPending.id);
+      setLocalLoins(getInitialLoinsForFish(nextPending));
     } else {
       setExpandedFishId(null);
     }
   };
 
   // Memoized Live Aggregates
-  const { doneCount, pendingCount, totalLoinDone, totalLoinADone, totalLoinBDone, totalLoinCDone, overallBatchYield } = useMemo(() => {
+  const { doneCount, pendingCount, totalLoinDone, totalLoinADone, totalLoinBDone, totalLoinCDone, totalRejectDone, overallBatchYield } = useMemo(() => {
     const doneFishList = activeBatchFish.filter(f => f.status === 'done');
     const done = doneFishList.length;
     const pending = activeBatchFish.length - done;
     const totalUtuhDone = doneFishList.reduce((acc, f) => acc + (f.beratUtuh || 0), 0);
 
-    let loinTotal = 0;
+    let loinTotal = 0; // saleable loin
     let loinA = 0;
     let loinB = 0;
     let loinC = 0;
+    let loinReject = 0;
 
     doneFishList.forEach(f => {
       (f.loins || []).forEach(l => {
-        const w = l.weight || 0;
-        loinTotal += w;
-        if (l.grade === 'A') loinA += w;
-        else if (l.grade === 'B') loinB += w;
-        else if (l.grade === 'C') loinC += w;
+        const w = Math.max(0, l.weight || 0);
+        if (l.grade === 'A') { loinA += w; loinTotal += w; }
+        else if (l.grade === 'B') { loinB += w; loinTotal += w; }
+        else if (l.grade === 'C') { loinC += w; loinTotal += w; }
+        else if (l.grade === 'Reject') { loinReject += w; }
       });
     });
 
@@ -167,6 +194,7 @@ export const Step2MejaPotong: React.FC = () => {
       totalLoinADone: loinA,
       totalLoinBDone: loinB,
       totalLoinCDone: loinC,
+      totalRejectDone: loinReject,
       overallBatchYield: yieldPct
     };
   }, [activeBatchFish]);
@@ -195,9 +223,15 @@ export const Step2MejaPotong: React.FC = () => {
 
   return (
     <div className="space-y-4 sm:space-y-6 max-w-4xl mx-auto">
-      
+
+      {activeBatch.lifecycleStatus === 'FINAL' && (
+        <div className="rounded-xl border border-emerald-500/40 bg-emerald-950/70 p-3 text-xs font-semibold text-emerald-200" role="status">
+          Batch FINAL terkunci. Hasil potong hanya dapat dibaca sampai batch dibuka kembali oleh owner/manager.
+        </div>
+      )}
+
       {/* 1. Header & Live Yield Progress Bar */}
-      <section 
+      <section
         aria-labelledby="meja-potong-heading"
         className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4"
       >
@@ -239,10 +273,10 @@ export const Step2MejaPotong: React.FC = () => {
                     ? 'text-emerald-400'
                     : 'text-amber-300'
               }`}>
-                {doneCount === 0 
-                  ? 'Siap Potong' 
-                  : overallBatchYield >= 0.60 
-                    ? '✓ Sesuai Target (≥60%)' 
+                {doneCount === 0
+                  ? 'Siap Potong'
+                  : overallBatchYield >= 0.60
+                    ? '✓ Sesuai Target (≥60%)'
                     : '⚠️ Rendemen Rendah (<60%)'}
               </span>
             </div>
@@ -258,7 +292,7 @@ export const Step2MejaPotong: React.FC = () => {
             </span>
           </div>
           <div className="w-full bg-slate-950 h-3 rounded-full overflow-hidden border border-slate-800">
-            <div 
+            <div
               className="bg-gradient-to-r from-cyan-500 to-emerald-500 h-full rounded-full transition-all duration-300"
               style={{ width: `${activeBatchFish.length > 0 ? (doneCount / activeBatchFish.length) * 100 : 0}%` }}
               role="progressbar"
@@ -356,7 +390,7 @@ export const Step2MejaPotong: React.FC = () => {
           displayedFish.map((fish) => {
             const isExpanded = expandedFishId === fish.id;
             const isDone = fish.status === 'done';
-            
+
             // Total Loin on this fish
             const currentLoins = isExpanded ? localLoins : (fish.loins || []);
             const currentTotalLoin = currentLoins.reduce((acc, l) => acc + (l.weight || 0), 0);
@@ -364,11 +398,11 @@ export const Step2MejaPotong: React.FC = () => {
             const isYieldBelow60 = currentYield < 0.60;
 
             return (
-              <div 
+              <div
                 key={fish.id}
                 className={`bg-slate-900 rounded-2xl border-2 transition-all shadow-lg overflow-hidden ${
-                  isExpanded 
-                    ? 'border-cyan-500/80 ring-2 ring-cyan-500/20' 
+                  isExpanded
+                    ? 'border-cyan-500/80 ring-2 ring-cyan-500/20'
                     : 'border-slate-800 hover:border-slate-700'
                 }`}
               >
@@ -383,8 +417,8 @@ export const Step2MejaPotong: React.FC = () => {
                   <div className="flex items-start sm:items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
                     <div className="flex items-center gap-3">
                       <span className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm font-mono shrink-0 ${
-                        isDone 
-                          ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30' 
+                        isDone
+                          ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
                           : 'bg-slate-800 text-slate-200 border border-slate-700'
                       }`}>
                         #{fish.noIkan}
@@ -435,7 +469,7 @@ export const Step2MejaPotong: React.FC = () => {
                         </span>
                       </div>
                     </div>
-                    
+
                     {/* Mobile Only: Chevron top right */}
                     <div className="p-1 rounded-lg bg-slate-950 text-slate-400 sm:hidden shrink-0 mt-0.5">
                       {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
@@ -453,8 +487,8 @@ export const Step2MejaPotong: React.FC = () => {
                             {formatKg(currentTotalLoin)} ({formatPercent(currentYield)})
                           </span>
                           <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md inline-block mt-0 sm:mt-0.5 ${
-                            isYieldBelow60 
-                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' 
+                            isYieldBelow60
+                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
                               : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
                           }`}>
                             {isYieldBelow60 ? '⚠️ <60%' : '✓ ≥60%'}
@@ -477,7 +511,7 @@ export const Step2MejaPotong: React.FC = () => {
                 {/* Expanded Loin Tallying Pad */}
                 {isExpanded && (
                   <div className="p-4 bg-slate-950/95 border-t border-slate-800 space-y-4 animate-in fade-in">
-                    
+
                     {/* Feature 1: Cek & Ubah Grade Ikan (Meja Potong) */}
                     <div className="bg-slate-900 p-3.5 rounded-xl border border-slate-800 space-y-2.5">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
@@ -509,8 +543,9 @@ export const Step2MejaPotong: React.FC = () => {
                             <button
                               key={g}
                               type="button"
+                              disabled={activeBatch.lifecycleStatus === 'FINAL'}
                               onClick={() => handleChangeFishGrade(fish.id, g)}
-                              className={`py-2 px-3 rounded-xl font-extrabold text-xs border transition-all flex items-center justify-center gap-1.5 touch-manipulation focus-ring min-h-[40px] ${
+                              className={`py-2 px-3 rounded-xl font-extrabold text-xs border transition-all flex items-center justify-center gap-1.5 touch-manipulation focus-ring min-h-[44px] disabled:cursor-not-allowed disabled:opacity-50 ${
                                 isSelected
                                   ? g === 'A'
                                     ? 'bg-emerald-600 text-white border-emerald-400 shadow-md shadow-emerald-600/30'
@@ -544,7 +579,7 @@ export const Step2MejaPotong: React.FC = () => {
                       {localLoins.map((loin, index) => {
                         const plainLoinName = `Loin ${loin.id || index + 1}`;
                         return (
-                          <div 
+                          <div
                             key={loin.id}
                             className="bg-slate-900 p-3.5 rounded-xl border border-slate-800 space-y-2.5"
                           >
@@ -553,7 +588,7 @@ export const Step2MejaPotong: React.FC = () => {
                                 <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
                                 {plainLoinName}
                               </span>
-                              
+
                               <div className="flex items-center gap-3">
                                 <span className="text-[10px] sm:text-[11px] text-slate-400 font-mono">
                                   {fish.beratUtuh > 0 && loin.weight > 0 ? formatPercent(loin.weight / fish.beratUtuh) : '0%'} rendemen
@@ -561,6 +596,7 @@ export const Step2MejaPotong: React.FC = () => {
                                 {localLoins.length > 1 && (
                                   <button
                                     type="button"
+                                    disabled={activeBatch.lifecycleStatus === 'FINAL'}
                                     onClick={() => handleRemoveLoin(loin.id)}
                                     className="p-2 -mr-1 text-slate-500 hover:text-rose-400 rounded-lg focus-ring transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center shrink-0 touch-manipulation"
                                     title={`Hapus ${plainLoinName}`}
@@ -576,11 +612,13 @@ export const Step2MejaPotong: React.FC = () => {
                             <div className="relative">
                               <input
                                 type="number"
+                                disabled={activeBatch.lifecycleStatus === 'FINAL'}
                                 step="0.01"
+                                min="0"
                                 inputMode="decimal"
                                 placeholder="0.00"
                                 value={loin.weight > 0 ? loin.weight : ''}
-                                onChange={(e) => handleLoinChange(loin.id, 'weight', parseFloat(e.target.value) || 0)}
+                                onChange={(e) => handleLoinChange(loin.id, 'weight', Math.max(0, parseFloat(e.target.value) || 0))}
                                 className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 sm:py-2.5 text-lg font-black text-cyan-300 font-mono tabular-nums focus-ring min-h-[48px]"
                                 aria-label={`Berat timbangan ${plainLoinName} dalam kilogram`}
                               />
@@ -599,17 +637,18 @@ export const Step2MejaPotong: React.FC = () => {
                                     <button
                                       key={g}
                                       type="button"
+                                      disabled={activeBatch.lifecycleStatus === 'FINAL'}
                                       role="radio"
                                       aria-checked={isSel}
                                       onClick={() => handleLoinChange(loin.id, 'grade', g)}
                                       className={`py-3 sm:py-2 rounded-lg text-xs font-bold border transition-all touch-manipulation focus-ring min-h-[44px] ${
-                                        isSel 
-                                          ? g === 'A' 
-                                            ? 'bg-emerald-600 text-white border-emerald-400 shadow-sm' 
-                                            : g === 'B' 
-                                              ? 'bg-blue-600 text-white border-blue-400 shadow-sm' 
-                                              : g === 'C' 
-                                                ? 'bg-amber-600 text-white border-amber-400 shadow-sm' 
+                                        isSel
+                                          ? g === 'A'
+                                            ? 'bg-emerald-600 text-white border-emerald-400 shadow-sm'
+                                            : g === 'B'
+                                              ? 'bg-blue-600 text-white border-blue-400 shadow-sm'
+                                              : g === 'C'
+                                                ? 'bg-amber-600 text-white border-amber-400 shadow-sm'
                                                 : 'bg-rose-600 text-white border-rose-400 shadow-sm'
                                           : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
                                       }`}
@@ -630,7 +669,8 @@ export const Step2MejaPotong: React.FC = () => {
                     <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between pt-2 gap-3 sm:gap-0">
                       <button
                         type="button"
-                        onClick={() => handleAddLoin(fish.gradeNota)}
+                        disabled={activeBatch.lifecycleStatus === 'FINAL'}
+                        onClick={() => handleAddLoin(fish.gradePotong || fish.gradeNota)}
                         className="px-4 py-3 sm:py-2.5 w-full sm:w-auto bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-cyan-500/40 hover:border-cyan-400 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition-all touch-manipulation focus-ring shadow-sm min-h-[44px]"
                       >
                         <Plus className="w-4 h-4 text-cyan-400" aria-hidden="true" />
@@ -654,10 +694,10 @@ export const Step2MejaPotong: React.FC = () => {
                         <div className="text-left sm:text-right">
                           <span className="text-xs text-slate-300 block">Rendemen Ikan:</span>
                           <span className={`text-base font-extrabold font-mono tabular-nums ${
-                            currentYield === 0 
-                              ? 'text-slate-400' 
-                              : currentYield >= 0.60 
-                                ? 'text-emerald-400' 
+                            currentYield === 0
+                              ? 'text-slate-400'
+                              : currentYield >= 0.60
+                                ? 'text-emerald-400'
                                 : 'text-amber-300'
                           }`}>
                             {formatPercent(currentYield)} {currentYield === 0 ? '' : currentYield >= 0.60 ? '✓ Sesuai Target (≥60%)' : '⚠️ Rendemen Rendah (<60%)'}
@@ -667,8 +707,9 @@ export const Step2MejaPotong: React.FC = () => {
 
                       <button
                         type="button"
+                        disabled={activeBatch.lifecycleStatus === 'FINAL'}
                         onClick={() => handleSaveFishLoins(fish.id)}
-                        className="w-full py-3.5 px-4 sm:px-6 bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 active:scale-[0.99] text-white font-extrabold rounded-2xl text-sm sm:text-base shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 transition-all touch-manipulation focus-ring min-h-[50px] whitespace-normal sm:whitespace-nowrap leading-tight text-center"
+                        className="w-full py-3.5 px-4 sm:px-6 bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40 text-white font-extrabold rounded-2xl text-sm sm:text-base shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 transition-all touch-manipulation focus-ring min-h-[50px] whitespace-normal sm:whitespace-nowrap leading-tight text-center"
                       >
                         <CheckCircle2 className="w-5 h-5 shrink-0" aria-hidden="true" />
                         <span>SIMPAN HASIL POTONG <br className="sm:hidden" /> (IKAN #{fish.noIkan})</span>

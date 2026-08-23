@@ -1,17 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { FishGrade } from '../types';
-import { formatKg, formatRupiah } from '../utils/calculations';
+import { formatKg, formatRupiah, safeNonNegative } from '../utils/calculations';
 import { Plus, Trash2, ArrowRight, Ship, Edit3, Save, X, Check, Scale, AlertCircle } from 'lucide-react';
 
 export const Step1IkanMasuk: React.FC = () => {
-  const { 
-    activeBatch, 
-    activeBatchFish, 
-    addFishRecord, 
-    deleteFishRecord, 
+  const {
+    activeBatch,
+    activeBatchFish,
+    addFishRecord,
+    deleteFishRecord,
     setActiveTab,
-    updateBatch
+    updateBatch,
+    canManageFinancials
   } = useApp();
 
   // Form State for Fish Entry
@@ -30,34 +31,72 @@ export const Step1IkanMasuk: React.FC = () => {
   const [editHargaC, setEditHargaC] = useState(activeBatch.hargaBeliGradeC);
   const [editArmada, setEditArmada] = useState(activeBatch.biayaArmada);
 
-  const nextNo = activeBatchFish.length + 1;
+  const editTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const editModalRef = useRef<HTMLDivElement | null>(null);
+  const editFirstInputRef = useRef<HTMLInputElement | null>(null);
+
+  const nextNo = activeBatchFish.length > 0 ? Math.max(...activeBatchFish.map(f => f.noIkan || 0)) + 1 : 1;
   const kodeOtomatis = customKode.trim() || `Tuna Sirip Kuning #${String(nextNo).padStart(3, '0')}`;
   const totalKgIkan = activeBatchFish.reduce((acc, f) => acc + (f.beratUtuh || 0), 0);
 
-  const handleSaveBatchInfo = (e: React.FormEvent) => {
+  // Focus trap & Escape key listener
+  useEffect(() => {
+    if (isEditingBatch) {
+      setTimeout(() => editFirstInputRef.current?.focus(), 50);
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          setIsEditingBatch(false);
+          editTriggerRef.current?.focus();
+        } else if (e.key === 'Tab' && editModalRef.current) {
+          const focusable = editModalRef.current.querySelectorAll<HTMLElement>(
+            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+          );
+          if (focusable.length === 0) return;
+          const first = focusable[0];
+          const last = focusable[focusable.length - 1];
+          if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [isEditingBatch]);
+
+  const handleSaveBatchInfo = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateBatch(activeBatch.id, {
-      nelayan: editNelayan.trim() || 'Nelayan Tanpa Nama',
-      tanggal: editTanggal,
-      hargaBeliGradeA: editHargaA,
-      hargaBeliGradeB: editHargaB,
-      hargaBeliGradeC: editHargaC,
-      biayaArmada: editArmada
-    });
-    setIsEditingBatch(false);
+    try {
+      await updateBatch(activeBatch.id, {
+        nelayan: editNelayan.trim() || 'Nelayan Tanpa Nama',
+        tanggal: editTanggal,
+        hargaBeliGradeA: safeNonNegative(editHargaA, 50000),
+        hargaBeliGradeB: safeNonNegative(editHargaB, 46000),
+        hargaBeliGradeC: safeNonNegative(editHargaC, 43000),
+        biayaArmada: safeNonNegative(editArmada, 0)
+      });
+      setIsEditingBatch(false);
+      editTriggerRef.current?.focus();
+    } catch {
+      // Error ditampilkan oleh banner sinkronisasi global.
+    }
   };
 
   const handleOpenEdit = () => {
     setEditNelayan(activeBatch.nelayan);
     setEditTanggal(activeBatch.tanggal);
-    setEditHargaA(activeBatch.hargaBeliGradeA || 50000);
-    setEditHargaB(activeBatch.hargaBeliGradeB);
-    setEditHargaC(activeBatch.hargaBeliGradeC);
-    setEditArmada(activeBatch.biayaArmada);
+    setEditHargaA(activeBatch.hargaBeliGradeA ?? 50000);
+    setEditHargaB(activeBatch.hargaBeliGradeB ?? 46000);
+    setEditHargaC(activeBatch.hargaBeliGradeC ?? 43000);
+    setEditArmada(activeBatch.biayaArmada ?? 300000);
     setIsEditingBatch(true);
   };
 
-  const handleAddSingle = (e: React.FormEvent) => {
+  const handleAddSingle = async (e: React.FormEvent) => {
     e.preventDefault();
     const berat = parseFloat(beratUtuh);
     if (isNaN(berat) || berat <= 0) {
@@ -66,11 +105,12 @@ export const Step1IkanMasuk: React.FC = () => {
     }
 
     setErrorMessage(null);
-    addFishRecord({
+    try {
+      await addFishRecord({
       batchId: activeBatch.id,
       noIkan: nextNo,
       kodeIkan: kodeOtomatis,
-      beratUtuh: berat,
+      beratUtuh: Math.max(0, berat),
       gradeNota: gradeNota,
       status: 'pending',
       loins: [
@@ -79,7 +119,10 @@ export const Step1IkanMasuk: React.FC = () => {
         { id: 3, name: "Loin 3", weight: 0, grade: gradeNota },
         { id: 4, name: "Loin 4", weight: 0, grade: gradeNota }
       ]
-    });
+      });
+    } catch {
+      return;
+    }
 
     setLastAddedFish(`Ikan #${nextNo} (${formatKg(berat)} - Grade ${gradeNota}) berhasil disimpan!`);
     setBeratUtuh('');
@@ -92,9 +135,15 @@ export const Step1IkanMasuk: React.FC = () => {
 
   return (
     <div className="space-y-3 sm:space-y-6 max-w-4xl mx-auto">
-      
+
+      {activeBatch.lifecycleStatus === 'FINAL' && (
+        <div className="rounded-xl border border-emerald-500/40 bg-emerald-950/70 p-3 text-xs font-semibold text-emerald-200" role="status">
+          Batch FINAL terkunci. Reopen dari halaman HPP jika diperlukan koreksi.
+        </div>
+      )}
+
       {/* 1. Header Profile: Info Nelayan & Harga Beli */}
-      <section 
+      <section
         aria-labelledby="batch-info-heading"
         className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 sm:p-5 shadow-xl space-y-3"
       >
@@ -104,24 +153,25 @@ export const Step1IkanMasuk: React.FC = () => {
               <span className="text-[11px] font-bold text-cyan-400 uppercase tracking-wider">Langkah 1</span>
               <span className="text-[10px] sm:text-xs text-slate-400">&bull; Data Penerimaan</span>
             </div>
-            
+
             <div className="flex items-center gap-1.5 mt-0.5">
               <Ship className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400 shrink-0" aria-hidden="true" />
               <h1 id="batch-info-heading" className="text-base sm:text-xl font-extrabold text-white tracking-tight truncate">
                 {activeBatch.nelayan}
               </h1>
-              <button
+              {canManageFinancials && activeBatch.lifecycleStatus !== 'FINAL' && <button
+                ref={editTriggerRef}
                 onClick={handleOpenEdit}
-                className="p-1.5 text-slate-400 hover:text-cyan-300 hover:bg-slate-800 rounded-lg transition-colors focus-ring min-h-[36px] min-w-[36px] flex items-center justify-center shrink-0"
+                className="p-2 text-slate-400 hover:text-cyan-300 hover:bg-slate-800 rounded-xl transition-colors focus-ring min-h-[44px] min-w-[44px] flex items-center justify-center shrink-0"
                 aria-label="Ubah Nama Nelayan dan Harga Beli"
                 title="Ubah Nama Nelayan & Harga Beli"
               >
-                <Edit3 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              </button>
+                <Edit3 className="w-4 h-4" />
+              </button>}
             </div>
 
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-400 mt-0.5 font-mono">
-              <span>{activeBatch.id}</span>
+              <span>{activeBatch.code || activeBatch.id}</span>
               <span>&bull;</span>
               <span>{activeBatch.tanggal}</span>
             </div>
@@ -138,7 +188,7 @@ export const Step1IkanMasuk: React.FC = () => {
         </div>
 
         {/* Harga Beli Info Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2.5 text-xs font-mono">
+        {canManageFinancials ? <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2.5 text-xs font-mono">
           <div className="bg-slate-950 p-2 sm:p-2.5 rounded-xl border border-slate-800">
             <span className="text-slate-400 text-[10px] sm:text-[11px] block font-sans">Grade A</span>
             <span className="font-bold text-emerald-400 text-xs sm:text-sm tabular-nums">{formatRupiah(activeBatch.hargaBeliGradeA || 50000)}</span>
@@ -155,27 +205,39 @@ export const Step1IkanMasuk: React.FC = () => {
             <span className="text-slate-400 text-[10px] sm:text-[11px] block font-sans">Armada</span>
             <span className="font-bold text-slate-100 text-xs sm:text-sm tabular-nums">{formatRupiah(activeBatch.biayaArmada)}</span>
           </div>
-        </div>
+        </div> : (
+          <div className="rounded-xl border border-slate-800 bg-slate-950 p-3 text-xs text-slate-300">
+            Harga beli dan biaya armada disembunyikan untuk peran staff.
+          </div>
+        )}
       </section>
 
       {/* Modal Edit Nelayan & Batch Info */}
-      {isEditingBatch && (
-        <div 
+      {isEditingBatch && canManageFinancials && activeBatch.lifecycleStatus !== 'FINAL' && (
+        <div
           className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="edit-batch-title"
-          onClick={(e) => { if (e.target === e.currentTarget) setIsEditingBatch(false); }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsEditingBatch(false);
+              editTriggerRef.current?.focus();
+            }
+          }}
         >
-          <div className="bg-slate-900 border-t sm:border border-slate-700 rounded-t-2xl sm:rounded-2xl max-w-md w-full p-4 sm:p-6 shadow-2xl animate-in fade-in max-h-[90vh] overflow-y-auto">
+          <div ref={editModalRef} className="bg-slate-900 border-t sm:border border-slate-700 rounded-t-2xl sm:rounded-2xl max-w-md w-full p-4 sm:p-6 shadow-2xl animate-in fade-in max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
               <h2 id="edit-batch-title" className="text-base font-bold text-white flex items-center gap-2">
                 <Edit3 className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" aria-hidden="true" />
                 Ubah Info Nelayan
               </h2>
-              <button 
-                onClick={() => setIsEditingBatch(false)} 
-                className="p-2 text-slate-400 hover:text-white rounded-lg focus-ring min-h-[40px] min-w-[40px] flex items-center justify-center"
+              <button
+                onClick={() => {
+                  setIsEditingBatch(false);
+                  editTriggerRef.current?.focus();
+                }}
+                className="p-2 text-slate-400 hover:text-white rounded-xl focus-ring min-h-[44px] min-w-[44px] flex items-center justify-center"
                 aria-label="Tutup form edit"
               >
                 <X className="w-5 h-5" />
@@ -188,12 +250,13 @@ export const Step1IkanMasuk: React.FC = () => {
                   Nama Nelayan / Kapal *
                 </label>
                 <input
+                  ref={editFirstInputRef}
                   id="edit-nelayan-input"
                   type="text"
                   placeholder="Contoh: Pak Rudi (KM Samudera Jaya)"
                   value={editNelayan}
                   onChange={(e) => setEditNelayan(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-3 text-base text-white focus-ring font-medium"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-3 text-base text-white focus-ring font-medium min-h-[48px]"
                   autoFocus
                   required
                 />
@@ -206,7 +269,7 @@ export const Step1IkanMasuk: React.FC = () => {
                   type="date"
                   value={editTanggal}
                   onChange={(e) => setEditTanggal(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-3 text-base text-white focus-ring font-mono tabular-nums"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-3 text-base text-white focus-ring font-mono tabular-nums min-h-[48px]"
                 />
               </div>
 
@@ -217,10 +280,11 @@ export const Step1IkanMasuk: React.FC = () => {
                     id="edit-harga-a"
                     type="number"
                     step="500"
+                    min="0"
                     inputMode="numeric"
                     value={editHargaA}
-                    onChange={(e) => setEditHargaA(parseFloat(e.target.value) || 0)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-3 text-base text-white font-mono focus-ring tabular-nums"
+                    onChange={(e) => setEditHargaA(Math.max(0, parseFloat(e.target.value) || 0))}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-3 text-base text-white font-mono focus-ring tabular-nums min-h-[48px]"
                   />
                 </div>
                 <div>
@@ -229,10 +293,11 @@ export const Step1IkanMasuk: React.FC = () => {
                     id="edit-harga-b"
                     type="number"
                     step="500"
+                    min="0"
                     inputMode="numeric"
                     value={editHargaB}
-                    onChange={(e) => setEditHargaB(parseFloat(e.target.value) || 0)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-3 text-base text-white font-mono focus-ring tabular-nums"
+                    onChange={(e) => setEditHargaB(Math.max(0, parseFloat(e.target.value) || 0))}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-3 text-base text-white font-mono focus-ring tabular-nums min-h-[48px]"
                   />
                 </div>
                 <div>
@@ -241,10 +306,11 @@ export const Step1IkanMasuk: React.FC = () => {
                     id="edit-harga-c"
                     type="number"
                     step="500"
+                    min="0"
                     inputMode="numeric"
                     value={editHargaC}
-                    onChange={(e) => setEditHargaC(parseFloat(e.target.value) || 0)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-3 text-base text-white font-mono focus-ring tabular-nums"
+                    onChange={(e) => setEditHargaC(Math.max(0, parseFloat(e.target.value) || 0))}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-3 text-base text-white font-mono focus-ring tabular-nums min-h-[48px]"
                   />
                 </div>
               </div>
@@ -255,26 +321,31 @@ export const Step1IkanMasuk: React.FC = () => {
                   id="edit-armada-input"
                   type="number"
                   step="10000"
+                  min="0"
                   inputMode="numeric"
                   value={editArmada}
-                  onChange={(e) => setEditArmada(parseFloat(e.target.value) || 0)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-3 text-base text-white font-mono focus-ring tabular-nums"
+                  onChange={(e) => setEditArmada(Math.max(0, parseFloat(e.target.value) || 0))}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-3 text-base text-white font-mono focus-ring tabular-nums min-h-[48px]"
                 />
               </div>
 
-              <div className="flex gap-2 pt-3">
+              <div className="flex gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => setIsEditingBatch(false)}
-                  className="flex-1 sm:flex-none px-4 py-3 bg-slate-800 text-slate-300 rounded-xl font-semibold touch-manipulation min-h-[48px] text-sm"
+                  onClick={() => {
+                    setIsEditingBatch(false);
+                    editTriggerRef.current?.focus();
+                  }}
+                  className="flex-1 px-4 py-3 rounded-xl text-sm font-bold text-slate-300 hover:bg-slate-800 transition-colors focus-ring min-h-[48px]"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-5 py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl shadow-lg shadow-cyan-600/30 flex items-center justify-center gap-1.5 touch-manipulation focus-ring min-h-[48px] text-sm"
+                  className="flex-1 px-5 py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-sm font-bold transition-all shadow-md shadow-cyan-600/30 flex items-center justify-center gap-2 focus-ring min-h-[48px]"
                 >
-                  <Save className="w-4 h-4" /> Simpan
+                  <Save className="w-4 h-4" />
+                  <span>Simpan Perubahan</span>
                 </button>
               </div>
             </form>
@@ -282,159 +353,165 @@ export const Step1IkanMasuk: React.FC = () => {
         </div>
       )}
 
-      {/* 2. Fast Input Box for Fish: Large, Simple, Mobile-Friendly */}
-      <section 
+      {/* 2. Form Input Cepat Timbang Masuk */}
+      <section
         aria-labelledby="input-fish-heading"
-        className="bg-slate-900 border border-cyan-500/40 rounded-2xl p-3.5 sm:p-5 shadow-2xl space-y-3 sm:space-y-4"
+        className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4"
       >
-        <div className="flex items-center justify-between gap-2">
-          <h2 id="input-fish-heading" className="font-extrabold text-white text-base sm:text-lg flex items-center gap-2">
+        <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+          <div className="flex items-center gap-2">
             <Scale className="w-5 h-5 text-cyan-400" aria-hidden="true" />
-            Timbang Ikan #{nextNo}
-          </h2>
+            <h2 id="input-fish-heading" className="text-base sm:text-lg font-bold text-white">
+              Input Timbangan Ikan Baru
+            </h2>
+          </div>
+          <span className="text-xs px-2.5 py-1 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 font-mono font-bold">
+            Ikan Ke-#{nextNo}
+          </span>
         </div>
 
         {errorMessage && (
-          <div className="flex items-center gap-2 p-3 bg-rose-950/80 border border-rose-600/60 rounded-xl text-rose-200 text-xs font-semibold animate-in fade-in">
-            <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" aria-hidden="true" />
+          <div className="p-3 bg-rose-950/80 border border-rose-600/60 rounded-xl text-rose-200 text-xs font-semibold flex items-center gap-2 animate-in fade-in" role="alert">
+            <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
             <span>{errorMessage}</span>
           </div>
         )}
 
         {lastAddedFish && (
-          <div className="flex items-center gap-2 p-3 bg-emerald-950/80 border border-emerald-500/60 rounded-xl text-emerald-200 text-xs font-bold animate-in fade-in">
-            <Check className="w-4 h-4 shrink-0 text-emerald-400" aria-hidden="true" />
+          <div className="p-3 bg-emerald-950/80 border border-emerald-500/60 rounded-xl text-emerald-200 text-xs font-semibold flex items-center gap-2 animate-in fade-in">
+            <Check className="w-4 h-4 shrink-0 text-emerald-400" />
             <span>{lastAddedFish}</span>
           </div>
         )}
 
-        <form onSubmit={handleAddSingle} className="space-y-3 sm:space-y-4">
-          <div className="space-y-3 sm:space-y-0 sm:grid sm:grid-cols-12 sm:gap-3.5">
-            
-            {/* Berat Utuh Input (Giant Numeric Field) */}
-            <div className="sm:col-span-6">
-              <label htmlFor="berat-utuh-input" className="block text-xs font-bold text-slate-200 mb-1.5">
-                1. Berat Timbangan (kg) *
-              </label>
-              <div className="relative">
-                <input
-                  id="berat-utuh-input"
-                  type="number"
-                  step="0.1"
-                  inputMode="decimal"
-                  placeholder="Contoh: 52.5"
-                  value={beratUtuh}
-                  onChange={(e) => {
-                    setBeratUtuh(e.target.value);
-                    if (errorMessage) setErrorMessage(null);
-                  }}
-                  className="w-full bg-slate-950 border-2 border-cyan-500/50 rounded-2xl px-4 py-3.5 text-2xl font-black text-cyan-300 focus-ring font-mono tabular-nums placeholder:text-slate-600"
-                  autoFocus
-                  required
-                />
-                <span className="absolute right-4 top-4 text-sm text-slate-400 font-extrabold font-mono pointer-events-none">
-                  KG
-                </span>
-              </div>
-            </div>
+        <form onSubmit={handleAddSingle} className="space-y-4">
 
-            {/* Grade Beli di Nota Nelayan */}
-            <div className="sm:col-span-6">
-              <span className="block text-xs font-bold text-slate-200 mb-1.5">
-                2. Grade di Nota *
+          {/* Main Input: Berat Timbangan */}
+          <div>
+            <label htmlFor="input-berat-utuh" className="block text-xs sm:text-sm font-bold text-slate-200 mb-1.5">
+              Berat Timbang Utuh (KG) *
+            </label>
+            <div className="relative">
+              <input
+                id="input-berat-utuh"
+                type="number"
+                step="0.1"
+                min="0"
+                inputMode="decimal"
+                placeholder="Contoh: 53.5"
+                value={beratUtuh}
+                onChange={(e) => {
+                  setBeratUtuh(e.target.value);
+                  if (errorMessage) setErrorMessage(null);
+                }}
+                className="w-full bg-slate-950 border-2 border-slate-700 focus:border-cyan-400 rounded-2xl px-4 py-3.5 sm:py-4 text-2xl sm:text-3xl font-black text-cyan-300 font-mono focus-ring tabular-nums placeholder:text-slate-700 min-h-[56px]"
+                autoFocus
+                required
+              />
+              <span className="absolute right-4 top-4 text-sm font-extrabold text-slate-500 font-mono pointer-events-none">
+                KG
               </span>
-              <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Grade Nota Nelayan">
-                {(['C', 'B', 'A'] as FishGrade[]).map((g) => {
-                  const isSelected = gradeNota === g;
-                  const price = g === 'A' ? activeBatch.hargaBeliGradeA : g === 'B' ? activeBatch.hargaBeliGradeB : activeBatch.hargaBeliGradeC;
-                  
-                  return (
-                    <button
-                      key={g}
-                      type="button"
-                      role="radio"
-                      aria-checked={isSelected}
-                      onClick={() => setGradeNota(g)}
-                      className={`py-3 px-2 rounded-xl border-2 transition-all flex flex-col items-center justify-center touch-manipulation focus-ring min-h-[56px] ${
-                        isSelected
-                          ? g === 'C' 
-                            ? 'bg-amber-600/90 text-white border-amber-400 shadow-md shadow-amber-600/30'
-                            : g === 'B' 
-                              ? 'bg-blue-600/90 text-white border-blue-400 shadow-md shadow-blue-600/30'
-                              : 'bg-emerald-600/90 text-white border-emerald-400 shadow-md shadow-emerald-600/30'
-                          : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700 active:bg-slate-900'
-                      }`}
-                    >
-                      <span className="font-extrabold text-sm sm:text-base">Grade {g}</span>
-                      <span className="text-[10px] opacity-90 font-mono tabular-nums mt-0.5">
-                        {formatRupiah(price || 0)}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
             </div>
-
           </div>
 
-          {/* Big Tap Button to Save */}
-          <div className="pt-1">
-            <button
-              type="submit"
-              className="w-full py-3.5 px-6 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 active:scale-[0.99] text-white font-extrabold rounded-2xl text-base shadow-lg shadow-cyan-600/30 flex items-center justify-center gap-2 transition-all touch-manipulation focus-ring min-h-[50px]"
-            >
-              <Plus className="w-5 h-5" aria-hidden="true" />
-              <span>SIMPAN IKAN #{nextNo}</span>
-            </button>
+          {/* Grade Selector on Nota Purchase */}
+          <div>
+            <span className="block text-xs font-semibold text-slate-300 mb-2">
+              Grade Beli di Nota Nelayan:
+            </span>
+            <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Grade beli di nota nelayan">
+              {(['C', 'B', 'A'] as FishGrade[]).map((g) => {
+                const isSelected = gradeNota === g;
+                return (
+                  <button
+                    key={g}
+                    type="button"
+                    role="radio"
+                    aria-checked={isSelected}
+                    onClick={() => setGradeNota(g)}
+                    className={`py-3 px-3 rounded-xl font-bold text-sm transition-all border flex flex-col items-center justify-center gap-0.5 touch-manipulation focus-ring min-h-[54px] ${
+                      isSelected
+                        ? g === 'A'
+                          ? 'bg-emerald-600 text-white border-emerald-400 shadow-md shadow-emerald-600/30 scale-[1.02]'
+                          : g === 'B'
+                            ? 'bg-blue-600 text-white border-blue-400 shadow-md shadow-blue-600/30 scale-[1.02]'
+                            : 'bg-amber-600 text-white border-amber-400 shadow-md shadow-amber-600/30 scale-[1.02]'
+                        : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-white'
+                    }`}
+                  >
+                    <span>Grade {g}</span>
+                    <span className="text-[10px] font-mono opacity-80">
+                      {canManageFinancials
+                        ? (g === 'A' ? formatRupiah(activeBatch.hargaBeliGradeA || 50000) : g === 'B' ? formatRupiah(activeBatch.hargaBeliGradeB) : formatRupiah(activeBatch.hargaBeliGradeC))
+                        : 'Pilih mutu nota'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
+
+          {/* Submit Button */}
+          <button
+            type="submit"
+            disabled={activeBatch.lifecycleStatus === 'FINAL'}
+            className="w-full py-4 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40 text-white font-extrabold rounded-2xl text-base shadow-xl shadow-cyan-600/30 flex items-center justify-center gap-2 transition-all touch-manipulation focus-ring min-h-[52px]"
+          >
+            <Plus className="w-5 h-5" />
+            <span>Simpan Timbangan (Ikan #{nextNo})</span>
+          </button>
+
         </form>
       </section>
 
-      {/* 3. List of Registered Fish */}
-      <section 
+      {/* 3. Daftar Ikan yang Sudah Masuk */}
+      <section
         aria-labelledby="fish-list-heading"
-        className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 sm:p-5 shadow-xl space-y-3"
+        className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-3"
       >
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-          <div className="min-w-0">
-            <h2 id="fish-list-heading" className="font-extrabold text-white text-base">
-              Daftar Ikan ({activeBatchFish.length})
+        <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+          <div>
+            <h2 id="fish-list-heading" className="text-base font-bold text-white flex items-center gap-2">
+              Daftar Ikan Diterima
             </h2>
-            <p className="text-[11px] text-slate-400 truncate">{activeBatch.nelayan}</p>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Total {activeBatchFish.length} ekor ikan terdaftar pada batch {activeBatch.nelayan}
+            </p>
           </div>
-          <span className="text-xs text-slate-300 font-mono bg-slate-950 px-2.5 py-1.5 rounded-xl border border-slate-800 tabular-nums shrink-0">
-            <strong className="text-cyan-300 text-sm font-bold">{formatKg(totalKgIkan)}</strong>
+          <span className="text-sm font-black text-cyan-300 font-mono tabular-nums">
+            {formatKg(totalKgIkan)}
           </span>
         </div>
 
         {activeBatchFish.length === 0 ? (
-          <div className="text-center py-8 sm:py-10 px-4 text-slate-400 text-xs sm:text-sm bg-slate-950/50 rounded-xl border border-dashed border-slate-800">
-            Belum ada ikan yang dicatat. Silakan timbang dan masukkan berat ikan di formulir atas.
+          <div className="text-center py-8 px-4 bg-slate-950/60 rounded-xl border border-slate-800/80">
+            <Scale className="w-10 h-10 text-slate-600 mx-auto mb-2" aria-hidden="true" />
+            <p className="text-xs sm:text-sm text-slate-300 font-medium">Belum ada timbangan ikan pada batch ini.</p>
+            <p className="text-[11px] text-slate-500 mt-1">Masukkan kilogram timbangan di atas untuk mulai mendata.</p>
           </div>
         ) : (
           <>
-            {/* Mobile Card List (Visible on < sm screens) */}
-            <div className="grid grid-cols-1 gap-2 sm:hidden max-h-[50vh] overflow-y-auto -mx-0.5 px-0.5">
+            {/* Mobile Card List View (Visible on < sm screens) */}
+            <div className="space-y-2 block sm:hidden">
               {activeBatchFish.map((fish) => {
                 const isDone = fish.status === 'done';
-
                 return (
-                  <div 
+                  <div
                     key={fish.id}
-                    className="bg-slate-950 p-3 rounded-xl border border-slate-800/90 flex items-center justify-between gap-2 text-xs"
+                    className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-between gap-2"
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="w-7 h-7 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center font-bold text-slate-200 font-mono shrink-0 text-[11px]">
+                      <span className="w-7 h-7 rounded-lg bg-slate-900 border border-slate-700 text-cyan-300 text-xs font-bold font-mono flex items-center justify-center shrink-0">
                         #{fish.noIkan}
                       </span>
                       <div className="min-w-0">
-                        <div className="font-bold text-white text-sm font-mono tabular-nums">
+                        <span className="font-extrabold text-sm text-white font-mono block tabular-nums">
                           {formatKg(fish.beratUtuh)}
-                        </div>
+                        </span>
                         <div className="flex items-center gap-1.5 mt-0.5">
                           {fish.gradePotong && fish.gradePotong !== fish.gradeNota ? (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-[9px] font-bold">
-                              <span className={fish.gradeNota === 'A' ? 'text-emerald-300' : fish.gradeNota === 'B' ? 'text-blue-300' : 'text-amber-300'}>
+                            <span className="text-[10px] font-bold font-mono inline-flex items-center gap-1">
+                              <span className="text-slate-400 line-through">
                                 {fish.gradeNota}
                               </span>
                               <span className="text-slate-500">&rarr;</span>
@@ -444,10 +521,10 @@ export const Step1IkanMasuk: React.FC = () => {
                             </span>
                           ) : (
                             <span className={`px-1.5 py-0.5 rounded font-bold text-[10px] ${
-                              fish.gradeNota === 'A' 
-                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' 
-                                : fish.gradeNota === 'B' 
-                                  ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' 
+                              fish.gradeNota === 'A'
+                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                : fish.gradeNota === 'B'
+                                  ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
                                   : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                             }`}>
                               {fish.gradeNota}
@@ -463,8 +540,9 @@ export const Step1IkanMasuk: React.FC = () => {
                     </div>
 
                     <button
-                      onClick={() => deleteFishRecord(fish.id)}
-                      className="p-2 text-slate-500 hover:text-rose-400 active:bg-slate-900 rounded-xl transition-colors focus-ring min-h-[40px] min-w-[40px] flex items-center justify-center shrink-0"
+                      onClick={() => void deleteFishRecord(fish.id).catch(() => undefined)}
+                      disabled={activeBatch.lifecycleStatus === 'FINAL'}
+                      className="p-2 text-slate-500 hover:text-rose-400 active:bg-slate-900 rounded-xl transition-colors focus-ring min-h-[44px] min-w-[44px] flex items-center justify-center shrink-0"
                       aria-label={`Hapus ikan nomor ${fish.noIkan}`}
                     >
                       <Trash2 className="w-4 h-4" />
@@ -496,25 +574,25 @@ export const Step1IkanMasuk: React.FC = () => {
                         <td className="py-2.5 px-3 font-bold text-slate-200">#{fish.noIkan}</td>
                         <td className="py-2.5 px-3 text-white font-sans font-semibold">{fish.kodeIkan}</td>
                         <td className="py-2.5 px-3 font-bold text-cyan-300 tabular-nums">{formatKg(fish.beratUtuh)}</td>
-                        
+
                         <td className="py-2.5 px-3">
                           {fish.gradePotong && fish.gradePotong !== fish.gradeNota ? (
                             <div className="inline-flex items-center gap-1 bg-slate-950 px-2 py-0.5 rounded-lg border border-slate-700 text-[10px] font-bold">
                               <span className={`px-1.5 py-0.2 rounded ${
-                                fish.gradeNota === 'A' 
-                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' 
-                                  : fish.gradeNota === 'B' 
-                                    ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' 
+                                fish.gradeNota === 'A'
+                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                  : fish.gradeNota === 'B'
+                                    ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
                                     : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                               }`}>
                                 Grade {fish.gradeNota}
                               </span>
                               <span className="text-slate-400 font-bold">&rarr;</span>
                               <span className={`px-1.5 py-0.2 rounded ${
-                                fish.gradePotong === 'A' 
-                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' 
-                                  : fish.gradePotong === 'B' 
-                                    ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' 
+                                fish.gradePotong === 'A'
+                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                  : fish.gradePotong === 'B'
+                                    ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
                                     : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                               }`}>
                                 Grade {fish.gradePotong}
@@ -522,10 +600,10 @@ export const Step1IkanMasuk: React.FC = () => {
                             </div>
                           ) : (
                             <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${
-                              fish.gradeNota === 'A' 
-                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' 
-                                : fish.gradeNota === 'B' 
-                                  ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' 
+                              fish.gradeNota === 'A'
+                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                : fish.gradeNota === 'B'
+                                  ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
                                   : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                             }`}>
                               Grade {fish.gradeNota}
@@ -547,8 +625,9 @@ export const Step1IkanMasuk: React.FC = () => {
 
                         <td className="py-2.5 px-3 text-right">
                           <button
-                            onClick={() => deleteFishRecord(fish.id)}
-                            className="p-1.5 text-slate-400 hover:text-rose-400 rounded-lg transition-colors focus-ring"
+                            onClick={() => void deleteFishRecord(fish.id).catch(() => undefined)}
+                            disabled={activeBatch.lifecycleStatus === 'FINAL'}
+                            className="p-2 text-slate-400 hover:text-rose-400 rounded-lg transition-colors focus-ring min-h-[44px] min-w-[44px] flex items-center justify-center ml-auto"
                             aria-label={`Hapus ikan nomor ${fish.noIkan}`}
                             title="Hapus Ikan"
                           >
@@ -568,7 +647,7 @@ export const Step1IkanMasuk: React.FC = () => {
         <div className="pt-3 border-t border-slate-800">
           <button
             onClick={() => setActiveTab('proses')}
-            className="w-full py-3 bg-cyan-600 hover:bg-cyan-500 active:scale-[0.99] text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg shadow-cyan-600/30 transition-all touch-manipulation focus-ring min-h-[48px]"
+            className="w-full py-3.5 bg-cyan-600 hover:bg-cyan-500 active:scale-[0.99] text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg shadow-cyan-600/30 transition-all touch-manipulation focus-ring min-h-[48px]"
           >
             <span>Lanjut ke Meja Potong</span>
             <ArrowRight className="w-4 h-4" aria-hidden="true" />

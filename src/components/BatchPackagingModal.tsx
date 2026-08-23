@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { CustomMaterial, BatchInfo } from '../types';
-import { formatKg, formatRupiah } from '../utils/calculations';
+import { formatKg, formatRupiah, getJakartaDateString, safeNonNegative } from '../utils/calculations';
 import { Package, Plus, Trash2, X, Check, Sparkles, Save } from 'lucide-react';
 
 interface BatchPackagingModalProps {
@@ -10,13 +10,16 @@ interface BatchPackagingModalProps {
 }
 
 export const BatchPackagingModal: React.FC<BatchPackagingModalProps> = ({ isOpen, onClose }) => {
-  const { activeBatch, activeBatchFish, packagingPrices, updateBatch, updatePackagingPrices } = useApp();
+  const { activeBatch, activeBatchFish, packagingPrices, updateBatch, updatePackagingPrices, canManageFinancials } = useApp();
+
+  const modalRef = useRef<HTMLDivElement | null>(null);
+  const firstInputRef = useRef<HTMLInputElement | null>(null);
 
   // Defensive fallback for activeBatch
   const currentBatch = activeBatch || {
     id: 'BATCH-01',
     nelayan: 'Kapal Nelayan',
-    tanggal: new Date().toISOString().slice(0, 10),
+    tanggal: getJakartaDateString(),
     hargaBeliGradeB: 46000,
     hargaBeliGradeC: 43000,
     hargaBeliGradeA: 50000,
@@ -33,18 +36,21 @@ export const BatchPackagingModal: React.FC<BatchPackagingModalProps> = ({ isOpen
     alokasiPlastikLoinPerKg: 300
   };
 
-  // Calculate real loin kg for this batch
+  // Calculate real saleable loin kg for this batch (excluding reject)
   const totalLoinKg = useMemo(() => {
     if (!activeBatchFish || !Array.isArray(activeBatchFish)) return 0;
     return activeBatchFish.reduce((acc, fish) => {
-      const fishLoinSum = (fish?.loins || []).reduce((lAcc, l) => lAcc + (l?.weight || 0), 0);
+      const fishLoinSum = (fish?.loins || []).reduce((lAcc, l) => {
+        if (l?.grade === 'Reject') return lAcc;
+        return lAcc + (l?.weight || 0);
+      }, 0);
       return acc + fishLoinSum;
     }, 0);
   }, [activeBatchFish]);
 
   const autoBoxCount = totalLoinKg > 0 ? Math.ceil(totalLoinKg / 30) : 0;
 
-  // Local Form State (Quantity & Unit Prices per Batch)
+  // Local Form State (Quantity & Unit Prices per Batch) - All clamped non-negative
   const [qtyEs, setQtyEs] = useState<number>(0);
   const [priceEs, setPriceEs] = useState<number>(25000);
 
@@ -76,24 +82,52 @@ export const BatchPackagingModal: React.FC<BatchPackagingModalProps> = ({ isOpen
 
   const [saveAlert, setSaveAlert] = useState(false);
 
+  // Focus trap & Escape key handler
+  useEffect(() => {
+    if (isOpen) {
+      setTimeout(() => firstInputRef.current?.focus(), 50);
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          onClose();
+        } else if (e.key === 'Tab' && modalRef.current) {
+          const focusable = modalRef.current.querySelectorAll<HTMLElement>(
+            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+          );
+          if (focusable.length === 0) return;
+          const first = focusable[0];
+          const last = focusable[focusable.length - 1];
+          if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [isOpen, onClose]);
+
   // Sync state when modal opens or active batch changes
   useEffect(() => {
     if (isOpen && currentBatch) {
-      const boxes = currentBatch.jmlStyrofoamBox ?? autoBoxCount;
+      const boxes = safeNonNegative(currentBatch.jmlStyrofoamBox, autoBoxCount);
       setQtyBox(boxes);
-      setQtyEs(currentBatch.jmlEsBalok ?? (boxes > 0 ? Math.round(boxes * 0.5) : 0));
-      setQtyJelly(currentBatch.jmlJellyIceLusin ?? (boxes > 0 ? +(boxes * 0.75).toFixed(1) : 0));
-      setQtyLayer(currentBatch.jmlPlastikLayer ?? boxes);
-      setQtyFoam(currentBatch.jmlPlastikStyrofoam ?? boxes);
-      setQtyLakban(currentBatch.jmlLakbanRoll ?? (boxes > 0 ? Math.max(0.5, +(boxes * 0.025).toFixed(2)) : 0));
+      setQtyEs(safeNonNegative(currentBatch.jmlEsBalok, boxes > 0 ? Math.round(boxes * 0.5) : 0));
+      setQtyJelly(safeNonNegative(currentBatch.jmlJellyIceLusin, boxes > 0 ? +(boxes * 0.75).toFixed(1) : 0));
+      setQtyLayer(safeNonNegative(currentBatch.jmlPlastikLayer, boxes));
+      setQtyFoam(safeNonNegative(currentBatch.jmlPlastikStyrofoam, boxes));
+      setQtyLakban(safeNonNegative(currentBatch.jmlLakbanRoll, boxes > 0 ? Math.max(0.5, +(boxes * 0.025).toFixed(2)) : 0));
 
-      setPriceEs(currentBatch.hargaEsBalok ?? currentPrices.esBalok ?? 25000);
-      setPriceBox(currentBatch.hargaStyrofoamBox ?? currentPrices.styrofoamBox ?? 102500);
-      setPriceJelly(currentBatch.hargaJellyIceLusin ?? currentPrices.jellyIceLusin ?? 300);
-      setPriceLayer(currentBatch.hargaPlastikLayer ?? currentPrices.plastikLayer ?? 500);
-      setPriceFoam(currentBatch.hargaPlastikStyrofoam ?? currentPrices.plastikStyrofoam ?? 800);
-      setPriceLakban(currentBatch.hargaLakbanRoll ?? currentPrices.lakbanRoll ?? 100000);
-      setPricePlastikLoin(currentBatch.hargaPlastikLoinPerKg ?? currentPrices.alokasiPlastikLoinPerKg ?? 300);
+      setPriceEs(safeNonNegative(currentBatch.hargaEsBalok ?? currentPrices.esBalok, 25000));
+      setPriceBox(safeNonNegative(currentBatch.hargaStyrofoamBox ?? currentPrices.styrofoamBox, 102500));
+      setPriceJelly(safeNonNegative(currentBatch.hargaJellyIceLusin ?? currentPrices.jellyIceLusin, 300));
+      setPriceLayer(safeNonNegative(currentBatch.hargaPlastikLayer ?? currentPrices.plastikLayer, 500));
+      setPriceFoam(safeNonNegative(currentBatch.hargaPlastikStyrofoam ?? currentPrices.plastikStyrofoam, 800));
+      setPriceLakban(safeNonNegative(currentBatch.hargaLakbanRoll ?? currentPrices.lakbanRoll, 100000));
+      setPricePlastikLoin(safeNonNegative(currentBatch.hargaPlastikLoinPerKg ?? currentPrices.alokasiPlastikLoinPerKg, 300));
 
       if (Array.isArray(currentBatch.customMaterials) && currentBatch.customMaterials.length > 0) {
         setCustomMaterials([...currentBatch.customMaterials]);
@@ -126,8 +160,8 @@ export const BatchPackagingModal: React.FC<BatchPackagingModalProps> = ({ isOpen
   // Custom Material Handlers
   const handleAddCustomMaterial = () => {
     if (!newMatName.trim()) return;
-    const p = parseFloat(newMatPrice) || 0;
-    const q = parseFloat(newMatQty) || 0;
+    const p = safeNonNegative(parseFloat(newMatPrice), 0);
+    const q = safeNonNegative(parseFloat(newMatQty), 0);
     if (p <= 0 || q <= 0) return;
 
     const newMat: CustomMaterial = {
@@ -156,48 +190,48 @@ export const BatchPackagingModal: React.FC<BatchPackagingModalProps> = ({ isOpen
   const subtotalFoam = (qtyFoam || 0) * (priceFoam || 0);
   const subtotalLakban = (qtyLakban || 0) * (priceLakban || 0);
   const subtotalPlastikLoin = (totalLoinKg || 0) * (pricePlastikLoin || 0);
-  const subtotalCustom = (customMaterials || []).reduce((sum, m) => sum + ((m?.pricePerUnit || 0) * (m?.quantity || 0)), 0);
+  const subtotalCustom = (customMaterials || []).reduce((sum, m) => sum + (safeNonNegative(m?.pricePerUnit) * safeNonNegative(m?.quantity)), 0);
 
   const grandTotalKemasan = subtotalEs + subtotalBox + subtotalJelly + subtotalLayer + subtotalFoam + subtotalLakban + subtotalPlastikLoin + subtotalCustom;
   const costPerKgLoin = totalLoinKg > 0 ? grandTotalKemasan / totalLoinKg : 0;
 
-  // Save changes directly to active batch in localStorage
-  const handleSave = (e: React.FormEvent) => {
+  // Simpan kuantitas operasional dan, khusus owner/manager, data harga.
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const updatedBatchData: Partial<BatchInfo> = {
-      jmlEsBalok: qtyEs,
-      jmlStyrofoamBox: qtyBox,
-      jmlJellyIceLusin: qtyJelly,
-      jmlPlastikLayer: qtyLayer,
-      jmlPlastikStyrofoam: qtyFoam,
-      jmlLakbanRoll: qtyLakban,
+      jmlEsBalok: safeNonNegative(qtyEs),
+      jmlStyrofoamBox: safeNonNegative(qtyBox),
+      jmlJellyIceLusin: safeNonNegative(qtyJelly),
+      jmlPlastikLayer: safeNonNegative(qtyLayer),
+      jmlPlastikStyrofoam: safeNonNegative(qtyFoam),
+      jmlLakbanRoll: safeNonNegative(qtyLakban),
 
-      hargaEsBalok: priceEs,
-      hargaStyrofoamBox: priceBox,
-      hargaJellyIceLusin: priceJelly,
-      hargaPlastikLayer: priceLayer,
-      hargaPlastikStyrofoam: priceFoam,
-      hargaLakbanRoll: priceLakban,
-      hargaPlastikLoinPerKg: pricePlastikLoin,
+      hargaEsBalok: safeNonNegative(priceEs),
+      hargaStyrofoamBox: safeNonNegative(priceBox),
+      hargaJellyIceLusin: safeNonNegative(priceJelly),
+      hargaPlastikLayer: safeNonNegative(priceLayer),
+      hargaPlastikStyrofoam: safeNonNegative(priceFoam),
+      hargaLakbanRoll: safeNonNegative(priceLakban),
+      hargaPlastikLoinPerKg: safeNonNegative(pricePlastikLoin),
 
       customMaterials: customMaterials,
       biayaKemasanPerKgLoin: Math.round(costPerKgLoin)
     };
 
     if (currentBatch.id) {
-      updateBatch(currentBatch.id, updatedBatchData);
+      await updateBatch(currentBatch.id, updatedBatchData);
     }
 
     // Also update global packagingPrices templates for future batches
-    updatePackagingPrices({
-      esBalok: priceEs,
-      styrofoamBox: priceBox,
-      jellyIceLusin: priceJelly,
-      plastikLayer: priceLayer,
-      plastikStyrofoam: priceFoam,
-      lakbanRoll: priceLakban,
-      alokasiPlastikLoinPerKg: pricePlastikLoin
+    await updatePackagingPrices({
+      esBalok: safeNonNegative(priceEs),
+      styrofoamBox: safeNonNegative(priceBox),
+      jellyIceLusin: safeNonNegative(priceJelly),
+      plastikLayer: safeNonNegative(priceLayer),
+      plastikStyrofoam: safeNonNegative(priceFoam),
+      lakbanRoll: safeNonNegative(priceLakban),
+      alokasiPlastikLoinPerKg: safeNonNegative(pricePlastikLoin)
     });
 
     setSaveAlert(true);
@@ -207,8 +241,82 @@ export const BatchPackagingModal: React.FC<BatchPackagingModalProps> = ({ isOpen
     }, 900);
   };
 
+  const handleStaffSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentBatch.id || currentBatch.lifecycleStatus === 'FINAL') return;
+    try {
+      await updateBatch(currentBatch.id, {
+        jmlEsBalok: safeNonNegative(qtyEs),
+        jmlStyrofoamBox: safeNonNegative(qtyBox),
+        jmlJellyIceLusin: safeNonNegative(qtyJelly),
+        jmlPlastikLayer: safeNonNegative(qtyLayer),
+        jmlPlastikStyrofoam: safeNonNegative(qtyFoam),
+        jmlLakbanRoll: safeNonNegative(qtyLakban)
+      });
+      setSaveAlert(true);
+      setTimeout(onClose, 700);
+    } catch {
+      setSaveAlert(false);
+    }
+  };
+
+  if (!canManageFinancials) {
+    const quantityRows = [
+      ['Es balok', qtyEs, setQtyEs, 'balok'],
+      ['Styrofoam box', qtyBox, setQtyBox, 'box'],
+      ['Jelly ice', qtyJelly, setQtyJelly, 'lusin'],
+      ['Plastik layer', qtyLayer, setQtyLayer, 'lembar'],
+      ['Plastik styrofoam', qtyFoam, setQtyFoam, 'lembar'],
+      ['Lakban', qtyLakban, setQtyLakban, 'roll']
+    ] as const;
+    return (
+      <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-black/85 p-0 backdrop-blur-sm sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="staff-packaging-title">
+        <div ref={modalRef} className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl sm:rounded-2xl">
+          <div className="flex items-start justify-between gap-3 border-b border-slate-800 pb-3">
+            <div>
+              <h2 id="staff-packaging-title" className="font-extrabold text-white">Pemakaian Kemasan</h2>
+              <p className="mt-1 text-xs text-slate-300">Staff mencatat kuantitas. Harga dan nilai biaya hanya tersedia untuk owner/manager.</p>
+            </div>
+            <button type="button" onClick={onClose} className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl text-slate-300 hover:bg-slate-800 focus-ring" aria-label="Tutup">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          {currentBatch.lifecycleStatus === 'FINAL' && (
+            <p className="mt-3 rounded-xl border border-amber-500/40 bg-amber-950 p-3 text-xs font-semibold text-amber-200">Batch FINAL terkunci.</p>
+          )}
+          <form onSubmit={handleStaffSave} className="mt-4 space-y-3">
+            <button type="button" onClick={handleAutoFill} disabled={currentBatch.lifecycleStatus === 'FINAL'} className="min-h-[44px] w-full rounded-xl border border-purple-500/40 bg-purple-950 px-3 py-2 text-xs font-bold text-purple-200 disabled:opacity-40 focus-ring">
+              <Sparkles className="mr-1.5 inline h-4 w-4" /> Isi rekomendasi otomatis
+            </button>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {quantityRows.map(([label, value, setter, unit], index) => (
+                <label key={label} className="rounded-xl border border-slate-800 bg-slate-950 p-3 text-xs font-semibold text-slate-200">
+                  {label} ({unit})
+                  <input
+                    ref={index === 0 ? firstInputRef : undefined}
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={value || ''}
+                    disabled={currentBatch.lifecycleStatus === 'FINAL'}
+                    onChange={event => setter(Math.max(0, Number(event.target.value) || 0))}
+                    className="mt-1.5 min-h-[44px] w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 font-mono text-base text-white disabled:opacity-50 focus-ring"
+                  />
+                </label>
+              ))}
+            </div>
+            {saveAlert && <p role="status" className="text-center text-xs font-bold text-emerald-300">Pemakaian berhasil disimpan.</p>}
+            <button type="submit" disabled={currentBatch.lifecycleStatus === 'FINAL'} className="min-h-[48px] w-full rounded-xl bg-cyan-600 px-4 py-3 text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-40 focus-ring">
+              <Save className="mr-1.5 inline h-4 w-4" /> Simpan Pemakaian
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div 
+    <div
       className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto"
       role="dialog"
       aria-modal="true"
@@ -217,11 +325,12 @@ export const BatchPackagingModal: React.FC<BatchPackagingModalProps> = ({ isOpen
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div 
+      <div
+        ref={modalRef}
         className="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full p-4 sm:p-6 shadow-2xl animate-in fade-in my-auto max-h-[92vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        
+
         {/* Header */}
         <div className="flex items-start justify-between border-b border-slate-800 pb-3 mb-3">
           <div className="min-w-0">
@@ -235,10 +344,10 @@ export const BatchPackagingModal: React.FC<BatchPackagingModalProps> = ({ isOpen
               Batch: <strong className="text-cyan-300">{currentBatch.nelayan}</strong> &bull; {currentBatch.id}
             </p>
           </div>
-          <button 
+          <button
             type="button"
-            onClick={onClose} 
-            className="p-1.5 text-slate-400 hover:text-white rounded-lg focus-ring shrink-0"
+            onClick={onClose}
+            className="p-2 text-slate-400 hover:text-white rounded-xl focus-ring shrink-0 min-h-[44px] min-w-[44px] flex items-center justify-center"
             aria-label="Tutup formulir kemasan"
           >
             <X className="w-5 h-5" />
@@ -260,17 +369,17 @@ export const BatchPackagingModal: React.FC<BatchPackagingModalProps> = ({ isOpen
           <button
             type="button"
             onClick={handleAutoFill}
-            className="w-full sm:w-auto px-3 py-2 bg-purple-950/80 hover:bg-purple-900 text-purple-300 border border-purple-500/40 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all touch-manipulation focus-ring"
+            className="w-full sm:w-auto px-3.5 py-2.5 bg-purple-950/80 hover:bg-purple-900 text-purple-300 border border-purple-500/40 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all touch-manipulation focus-ring min-h-[44px]"
             title="Hitung otomatis rekomendasi jumlah box dan es berdasarkan kilogram loin"
           >
-            <Sparkles className="w-3.5 h-3.5" />
+            <Sparkles className="w-4 h-4" />
             <span>Isi Otomatis Sesuai Loin</span>
           </button>
         </div>
 
         {/* Scrollable Form Content */}
-        <form onSubmit={handleSave} className="flex-1 overflow-y-auto pr-1 space-y-4 text-xs">
-          
+        <form onSubmit={event => void handleSave(event).catch(() => setSaveAlert(false))} className="flex-1 overflow-y-auto pr-1 space-y-4 text-xs">
+
           {/* Section: Material Inti (Qty & Harga) */}
           <div className="space-y-3">
             <span className="font-extrabold text-xs text-slate-200 uppercase tracking-wider block">
@@ -278,34 +387,38 @@ export const BatchPackagingModal: React.FC<BatchPackagingModalProps> = ({ isOpen
             </span>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              
+
               {/* Es Balok */}
               <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1.5">
                 <div className="flex justify-between items-center">
-                  <label htmlFor="input-qty-es" className="font-bold text-white">Es Balok</label>
+                  <span className="font-bold text-white">Es Balok</span>
                   <span className="text-purple-300 font-mono font-bold">{formatRupiah(subtotalEs)}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <span className="text-[10px] text-slate-400 block mb-0.5">Jumlah (Balok):</span>
+                    <label htmlFor="input-qty-es" className="text-[10px] text-slate-300 font-semibold block mb-1">Jumlah (Balok):</label>
                     <input
+                      ref={firstInputRef}
                       id="input-qty-es"
                       type="number"
                       step="0.5"
+                      min="0"
                       placeholder="Qty"
                       value={qtyEs === 0 ? '' : qtyEs}
-                      onChange={(e) => setQtyEs(parseFloat(e.target.value) || 0)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-white font-mono text-sm focus-ring tabular-nums"
+                      onChange={(e) => setQtyEs(Math.max(0, parseFloat(e.target.value) || 0))}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2.5 text-white font-mono text-sm focus-ring tabular-nums min-h-[44px]"
                     />
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 block mb-0.5">Harga / Balok (Rp):</span>
+                    <label htmlFor="input-price-es" className="text-[10px] text-slate-300 font-semibold block mb-1">Harga / Balok (Rp):</label>
                     <input
+                      id="input-price-es"
                       type="number"
                       step="1000"
+                      min="0"
                       value={priceEs || ''}
-                      onChange={(e) => setPriceEs(parseFloat(e.target.value) || 0)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-white font-mono text-sm focus-ring tabular-nums"
+                      onChange={(e) => setPriceEs(Math.max(0, parseFloat(e.target.value) || 0))}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2.5 text-white font-mono text-sm focus-ring tabular-nums min-h-[44px]"
                     />
                   </div>
                 </div>
@@ -314,30 +427,33 @@ export const BatchPackagingModal: React.FC<BatchPackagingModalProps> = ({ isOpen
               {/* Styrofoam Box */}
               <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1.5">
                 <div className="flex justify-between items-center">
-                  <label htmlFor="input-qty-box" className="font-bold text-white">Styrofoam Box</label>
+                  <span className="font-bold text-white">Styrofoam Box</span>
                   <span className="text-purple-300 font-mono font-bold">{formatRupiah(subtotalBox)}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <span className="text-[10px] text-slate-400 block mb-0.5">Jumlah (Box):</span>
+                    <label htmlFor="input-qty-box" className="text-[10px] text-slate-300 font-semibold block mb-1">Jumlah (Box):</label>
                     <input
                       id="input-qty-box"
                       type="number"
                       step="1"
+                      min="0"
                       placeholder="Qty"
                       value={qtyBox === 0 ? '' : qtyBox}
-                      onChange={(e) => setQtyBox(parseFloat(e.target.value) || 0)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-white font-mono text-sm focus-ring tabular-nums"
+                      onChange={(e) => setQtyBox(Math.max(0, parseFloat(e.target.value) || 0))}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2.5 text-white font-mono text-sm focus-ring tabular-nums min-h-[44px]"
                     />
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 block mb-0.5">Harga / Box (Rp):</span>
+                    <label htmlFor="input-price-box" className="text-[10px] text-slate-300 font-semibold block mb-1">Harga / Box (Rp):</label>
                     <input
+                      id="input-price-box"
                       type="number"
                       step="500"
+                      min="0"
                       value={priceBox || ''}
-                      onChange={(e) => setPriceBox(parseFloat(e.target.value) || 0)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-white font-mono text-sm focus-ring tabular-nums"
+                      onChange={(e) => setPriceBox(Math.max(0, parseFloat(e.target.value) || 0))}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2.5 text-white font-mono text-sm focus-ring tabular-nums min-h-[44px]"
                     />
                   </div>
                 </div>
@@ -346,30 +462,33 @@ export const BatchPackagingModal: React.FC<BatchPackagingModalProps> = ({ isOpen
               {/* Jelly Ice */}
               <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1.5">
                 <div className="flex justify-between items-center">
-                  <label htmlFor="input-qty-jelly" className="font-bold text-white">Jelly Ice</label>
+                  <span className="font-bold text-white">Jelly Ice</span>
                   <span className="text-purple-300 font-mono font-bold">{formatRupiah(subtotalJelly)}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <span className="text-[10px] text-slate-400 block mb-0.5">Jumlah (Lusin):</span>
+                    <label htmlFor="input-qty-jelly" className="text-[10px] text-slate-300 font-semibold block mb-1">Jumlah (Lusin):</label>
                     <input
                       id="input-qty-jelly"
                       type="number"
                       step="0.5"
+                      min="0"
                       placeholder="Lusin"
                       value={qtyJelly === 0 ? '' : qtyJelly}
-                      onChange={(e) => setQtyJelly(parseFloat(e.target.value) || 0)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-white font-mono text-sm focus-ring tabular-nums"
+                      onChange={(e) => setQtyJelly(Math.max(0, parseFloat(e.target.value) || 0))}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2.5 text-white font-mono text-sm focus-ring tabular-nums min-h-[44px]"
                     />
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 block mb-0.5">Harga / Lusin (Rp):</span>
+                    <label htmlFor="input-price-jelly" className="text-[10px] text-slate-300 font-semibold block mb-1">Harga / Lusin (Rp):</label>
                     <input
+                      id="input-price-jelly"
                       type="number"
                       step="50"
+                      min="0"
                       value={priceJelly || ''}
-                      onChange={(e) => setPriceJelly(parseFloat(e.target.value) || 0)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-white font-mono text-sm focus-ring tabular-nums"
+                      onChange={(e) => setPriceJelly(Math.max(0, parseFloat(e.target.value) || 0))}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2.5 text-white font-mono text-sm focus-ring tabular-nums min-h-[44px]"
                     />
                   </div>
                 </div>
@@ -378,30 +497,33 @@ export const BatchPackagingModal: React.FC<BatchPackagingModalProps> = ({ isOpen
               {/* Lakban */}
               <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1.5">
                 <div className="flex justify-between items-center">
-                  <label htmlFor="input-qty-lakban" className="font-bold text-white">Lakban Roll</label>
+                  <span className="font-bold text-white">Lakban Roll</span>
                   <span className="text-purple-300 font-mono font-bold">{formatRupiah(subtotalLakban)}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <span className="text-[10px] text-slate-400 block mb-0.5">Jumlah (Roll):</span>
+                    <label htmlFor="input-qty-lakban" className="text-[10px] text-slate-300 font-semibold block mb-1">Jumlah (Roll):</label>
                     <input
                       id="input-qty-lakban"
                       type="number"
                       step="0.1"
+                      min="0"
                       placeholder="Roll"
                       value={qtyLakban === 0 ? '' : qtyLakban}
-                      onChange={(e) => setQtyLakban(parseFloat(e.target.value) || 0)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-white font-mono text-sm focus-ring tabular-nums"
+                      onChange={(e) => setQtyLakban(Math.max(0, parseFloat(e.target.value) || 0))}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2.5 text-white font-mono text-sm focus-ring tabular-nums min-h-[44px]"
                     />
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 block mb-0.5">Harga / Roll (Rp):</span>
+                    <label htmlFor="input-price-lakban" className="text-[10px] text-slate-300 font-semibold block mb-1">Harga / Roll (Rp):</label>
                     <input
+                      id="input-price-lakban"
                       type="number"
                       step="1000"
+                      min="0"
                       value={priceLakban || ''}
-                      onChange={(e) => setPriceLakban(parseFloat(e.target.value) || 0)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-white font-mono text-sm focus-ring tabular-nums"
+                      onChange={(e) => setPriceLakban(Math.max(0, parseFloat(e.target.value) || 0))}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2.5 text-white font-mono text-sm focus-ring tabular-nums min-h-[44px]"
                     />
                   </div>
                 </div>
@@ -410,30 +532,33 @@ export const BatchPackagingModal: React.FC<BatchPackagingModalProps> = ({ isOpen
               {/* Plastik Layer */}
               <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1.5">
                 <div className="flex justify-between items-center">
-                  <label htmlFor="input-qty-layer" className="font-bold text-white">Plastik Layer</label>
+                  <span className="font-bold text-white">Plastik Layer</span>
                   <span className="text-purple-300 font-mono font-bold">{formatRupiah(subtotalLayer)}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <span className="text-[10px] text-slate-400 block mb-0.5">Jumlah (Lembar):</span>
+                    <label htmlFor="input-qty-layer" className="text-[10px] text-slate-300 font-semibold block mb-1">Jumlah (Lembar):</label>
                     <input
                       id="input-qty-layer"
                       type="number"
                       step="1"
+                      min="0"
                       placeholder="Lembar"
                       value={qtyLayer === 0 ? '' : qtyLayer}
-                      onChange={(e) => setQtyLayer(parseFloat(e.target.value) || 0)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-white font-mono text-sm focus-ring tabular-nums"
+                      onChange={(e) => setQtyLayer(Math.max(0, parseFloat(e.target.value) || 0))}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2.5 text-white font-mono text-sm focus-ring tabular-nums min-h-[44px]"
                     />
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 block mb-0.5">Harga / Lembar (Rp):</span>
+                    <label htmlFor="input-price-layer" className="text-[10px] text-slate-300 font-semibold block mb-1">Harga / Lembar (Rp):</label>
                     <input
+                      id="input-price-layer"
                       type="number"
                       step="50"
+                      min="0"
                       value={priceLayer || ''}
-                      onChange={(e) => setPriceLayer(parseFloat(e.target.value) || 0)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-white font-mono text-sm focus-ring tabular-nums"
+                      onChange={(e) => setPriceLayer(Math.max(0, parseFloat(e.target.value) || 0))}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2.5 text-white font-mono text-sm focus-ring tabular-nums min-h-[44px]"
                     />
                   </div>
                 </div>
@@ -442,30 +567,33 @@ export const BatchPackagingModal: React.FC<BatchPackagingModalProps> = ({ isOpen
               {/* Plastik Foam */}
               <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1.5">
                 <div className="flex justify-between items-center">
-                  <label htmlFor="input-qty-foam" className="font-bold text-white">Plastik Foam (Styrofoam)</label>
+                  <span className="font-bold text-white">Plastik Foam (Styrofoam)</span>
                   <span className="text-purple-300 font-mono font-bold">{formatRupiah(subtotalFoam)}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <span className="text-[10px] text-slate-400 block mb-0.5">Jumlah (Lembar):</span>
+                    <label htmlFor="input-qty-foam" className="text-[10px] text-slate-300 font-semibold block mb-1">Jumlah (Lembar):</label>
                     <input
                       id="input-qty-foam"
                       type="number"
                       step="1"
+                      min="0"
                       placeholder="Lembar"
                       value={qtyFoam === 0 ? '' : qtyFoam}
-                      onChange={(e) => setQtyFoam(parseFloat(e.target.value) || 0)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-white font-mono text-sm focus-ring tabular-nums"
+                      onChange={(e) => setQtyFoam(Math.max(0, parseFloat(e.target.value) || 0))}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2.5 text-white font-mono text-sm focus-ring tabular-nums min-h-[44px]"
                     />
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 block mb-0.5">Harga / Lembar (Rp):</span>
+                    <label htmlFor="input-price-foam" className="text-[10px] text-slate-300 font-semibold block mb-1">Harga / Lembar (Rp):</label>
                     <input
+                      id="input-price-foam"
                       type="number"
                       step="50"
+                      min="0"
                       value={priceFoam || ''}
-                      onChange={(e) => setPriceFoam(parseFloat(e.target.value) || 0)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-white font-mono text-sm focus-ring tabular-nums"
+                      onChange={(e) => setPriceFoam(Math.max(0, parseFloat(e.target.value) || 0))}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2.5 text-white font-mono text-sm focus-ring tabular-nums min-h-[44px]"
                     />
                   </div>
                 </div>
@@ -481,14 +609,15 @@ export const BatchPackagingModal: React.FC<BatchPackagingModalProps> = ({ isOpen
                   <span className="text-purple-300 font-mono font-bold">{formatRupiah(subtotalPlastikLoin)}</span>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-400 block mb-0.5">Biaya Plastik / kg Loin (Rp):</span>
+                  <label htmlFor="input-price-plastik-loin" className="text-[10px] text-slate-300 font-semibold block mb-1">Biaya Plastik / kg Loin (Rp):</label>
                   <input
                     id="input-price-plastik-loin"
                     type="number"
                     step="50"
+                    min="0"
                     value={pricePlastikLoin || ''}
-                    onChange={(e) => setPricePlastikLoin(parseFloat(e.target.value) || 0)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-white font-mono text-sm focus-ring tabular-nums"
+                    onChange={(e) => setPricePlastikLoin(Math.max(0, parseFloat(e.target.value) || 0))}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2.5 text-white font-mono text-sm focus-ring tabular-nums min-h-[44px]"
                   />
                 </div>
               </div>
@@ -518,7 +647,7 @@ export const BatchPackagingModal: React.FC<BatchPackagingModalProps> = ({ isOpen
                 {customMaterials.map((mat) => {
                   const sub = (mat.pricePerUnit || 0) * (mat.quantity || 0);
                   return (
-                    <div 
+                    <div
                       key={mat.id}
                       className="bg-slate-950 p-2.5 rounded-xl border border-slate-800 flex items-center justify-between gap-2"
                     >
@@ -537,7 +666,7 @@ export const BatchPackagingModal: React.FC<BatchPackagingModalProps> = ({ isOpen
                       <button
                         type="button"
                         onClick={() => handleRemoveCustomMaterial(mat.id)}
-                        className="p-1.5 text-slate-400 hover:text-rose-400 active:bg-slate-800 rounded-lg transition-colors focus-ring shrink-0"
+                        className="p-2 text-slate-400 hover:text-rose-400 active:bg-slate-800 rounded-lg transition-colors focus-ring shrink-0 min-h-[44px] min-w-[44px] flex items-center justify-center"
                         title={`Hapus ${mat.name}`}
                         aria-label={`Hapus ${mat.name}`}
                       >
@@ -557,48 +686,54 @@ export const BatchPackagingModal: React.FC<BatchPackagingModalProps> = ({ isOpen
 
               <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
                 <div className="sm:col-span-4">
-                  <label className="block text-[10px] text-slate-300 mb-0.5">Nama Material:</label>
+                  <label htmlFor="input-new-mat-name" className="block text-[10px] text-slate-300 font-semibold mb-1">Nama Material:</label>
                   <input
+                    id="input-new-mat-name"
                     type="text"
                     placeholder="Contoh: Segel Pengaman"
                     value={newMatName}
                     onChange={(e) => setNewMatName(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-white focus-ring placeholder:text-slate-600"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2.5 text-xs text-white focus-ring placeholder:text-slate-600 min-h-[44px]"
                   />
                 </div>
 
                 <div className="sm:col-span-2">
-                  <label className="block text-[10px] text-slate-300 mb-0.5">Satuan:</label>
+                  <label htmlFor="input-new-mat-unit" className="block text-[10px] text-slate-300 font-semibold mb-1">Satuan:</label>
                   <input
+                    id="input-new-mat-unit"
                     type="text"
                     placeholder="pcs / roll"
                     value={newMatUnit}
                     onChange={(e) => setNewMatUnit(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-white focus-ring font-mono placeholder:text-slate-600"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2.5 text-xs text-white focus-ring font-mono placeholder:text-slate-600 min-h-[44px]"
                   />
                 </div>
 
                 <div className="sm:col-span-3">
-                  <label className="block text-[10px] text-slate-300 mb-0.5">Harga / Satuan (Rp):</label>
+                  <label htmlFor="input-new-mat-price" className="block text-[10px] text-slate-300 font-semibold mb-1">Harga / Satuan (Rp):</label>
                   <input
+                    id="input-new-mat-price"
                     type="number"
                     step="100"
+                    min="0"
                     placeholder="Rp"
                     value={newMatPrice}
                     onChange={(e) => setNewMatPrice(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-white font-mono focus-ring tabular-nums placeholder:text-slate-600"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2.5 text-xs text-white font-mono focus-ring tabular-nums placeholder:text-slate-600 min-h-[44px]"
                   />
                 </div>
 
                 <div className="sm:col-span-3">
-                  <label className="block text-[10px] text-slate-300 mb-0.5">Jumlah Terpakai:</label>
+                  <label htmlFor="input-new-mat-qty" className="block text-[10px] text-slate-300 font-semibold mb-1">Jumlah Terpakai:</label>
                   <input
+                    id="input-new-mat-qty"
                     type="number"
                     step="1"
+                    min="0"
                     placeholder="Qty"
                     value={newMatQty}
                     onChange={(e) => setNewMatQty(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-white font-mono focus-ring tabular-nums placeholder:text-slate-600"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2.5 text-xs text-white font-mono focus-ring tabular-nums placeholder:text-slate-600 min-h-[44px]"
                   />
                 </div>
               </div>
@@ -607,7 +742,7 @@ export const BatchPackagingModal: React.FC<BatchPackagingModalProps> = ({ isOpen
                 type="button"
                 onClick={handleAddCustomMaterial}
                 disabled={!newMatName.trim() || !(parseFloat(newMatPrice) > 0) || !(parseFloat(newMatQty) > 0)}
-                className="w-full py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-cyan-300 hover:text-white border border-cyan-500/40 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all touch-manipulation focus-ring min-h-[38px]"
+                className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-cyan-300 hover:text-white border border-cyan-500/40 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all touch-manipulation focus-ring min-h-[44px]"
               >
                 <Plus className="w-4 h-4" />
                 <span>Tambahkan ke Material Batch</span>
@@ -642,7 +777,8 @@ export const BatchPackagingModal: React.FC<BatchPackagingModalProps> = ({ isOpen
               </button>
               <button
                 type="submit"
-                className="flex-1 sm:flex-none px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-extrabold rounded-xl text-xs shadow-md shadow-purple-600/30 flex items-center justify-center gap-1.5 transition-all touch-manipulation focus-ring min-h-[44px]"
+                disabled={currentBatch.lifecycleStatus === 'FINAL'}
+                className="flex-1 sm:flex-none px-5 py-2.5 bg-purple-600 hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-40 text-white font-extrabold rounded-xl text-xs shadow-md shadow-purple-600/30 flex items-center justify-center gap-1.5 transition-all touch-manipulation focus-ring min-h-[44px]"
               >
                 <Save className="w-4 h-4" />
                 <span>Simpan Pemakaian Batch</span>
