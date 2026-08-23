@@ -10,7 +10,7 @@ interface BatchPackagingModalProps {
 }
 
 export const BatchPackagingModal: React.FC<BatchPackagingModalProps> = ({ isOpen, onClose }) => {
-  const { activeBatch, activeBatchFish, packagingPrices, updateBatch, updatePackagingPrices, canManageFinancials } = useApp();
+  const { activeBatch, activeBatchFish, packagingPrices, updateBatch, updatePackagingPrices } = useApp();
 
   const modalRef = useRef<HTMLDivElement | null>(null);
   const firstInputRef = useRef<HTMLInputElement | null>(null);
@@ -209,7 +209,7 @@ export const BatchPackagingModal: React.FC<BatchPackagingModalProps> = ({ isOpen
   const grandTotalKemasan = subtotalEs + subtotalBox + subtotalJelly + subtotalLayer + subtotalFoam + subtotalLakban + subtotalPlastikLoin + subtotalCustom;
   const costPerKgLoin = totalLoinKg > 0 ? grandTotalKemasan / totalLoinKg : 0;
 
-  // Simpan kuantitas operasional dan, khusus owner/manager, data harga.
+  // Owner dan pegawai dapat menyimpan kuantitas serta harga input kemasan.
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -254,80 +254,6 @@ export const BatchPackagingModal: React.FC<BatchPackagingModalProps> = ({ isOpen
       onClose();
     }, 900);
   };
-
-  const handleStaffSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!currentBatch.id || currentBatch.lifecycleStatus === 'FINAL') return;
-    try {
-      await updateBatch(currentBatch.id, {
-        jmlEsBalok: safeNonNegative(qtyEs),
-        jmlStyrofoamBox: safeNonNegative(qtyBox),
-        jmlJellyIceLusin: safeNonNegative(qtyJelly),
-        jmlPlastikLayer: safeNonNegative(qtyLayer),
-        jmlPlastikStyrofoam: safeNonNegative(qtyFoam),
-        jmlLakbanRoll: safeNonNegative(qtyLakban)
-      });
-      setSaveAlert(true);
-      setTimeout(onClose, 700);
-    } catch {
-      setSaveAlert(false);
-    }
-  };
-
-  if (!canManageFinancials) {
-    const quantityRows = [
-      ['Es balok', qtyEs, setQtyEs, 'balok'],
-      ['Styrofoam box', qtyBox, setQtyBox, 'box'],
-      ['Jelly ice', qtyJelly, setQtyJelly, 'lusin'],
-      ['Plastik layer', qtyLayer, setQtyLayer, 'lembar'],
-      ['Plastik styrofoam', qtyFoam, setQtyFoam, 'lembar'],
-      ['Lakban', qtyLakban, setQtyLakban, 'roll']
-    ] as const;
-    return (
-      <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-black/85 p-0 backdrop-blur-sm sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="staff-packaging-title">
-        <div ref={modalRef} className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl sm:rounded-2xl">
-          <div className="flex items-start justify-between gap-3 border-b border-slate-800 pb-3">
-            <div>
-              <h2 id="staff-packaging-title" className="font-extrabold text-white">Pemakaian Kemasan</h2>
-              <p className="mt-1 text-xs text-slate-300">Staff mencatat kuantitas. Harga dan nilai biaya hanya tersedia untuk owner/manager.</p>
-            </div>
-            <button type="button" onClick={onClose} className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl text-slate-300 hover:bg-slate-800 focus-ring" aria-label="Tutup">
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-          {currentBatch.lifecycleStatus === 'FINAL' && (
-            <p className="mt-3 rounded-xl border border-amber-500/40 bg-amber-950 p-3 text-xs font-semibold text-amber-200">Batch FINAL terkunci.</p>
-          )}
-          <form onSubmit={handleStaffSave} className="mt-4 space-y-3">
-            <button type="button" onClick={handleAutoFill} disabled={currentBatch.lifecycleStatus === 'FINAL'} className="min-h-[44px] w-full rounded-xl border border-purple-500/40 bg-purple-950 px-3 py-2 text-xs font-bold text-purple-200 disabled:opacity-40 focus-ring">
-              <Sparkles className="mr-1.5 inline h-4 w-4" /> Isi rekomendasi otomatis
-            </button>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {quantityRows.map(([label, value, setter, unit], index) => (
-                <label key={label} className="rounded-xl border border-slate-800 bg-slate-950 p-3 text-xs font-semibold text-slate-200">
-                  {label} ({unit})
-                  <input
-                    ref={index === 0 ? firstInputRef : undefined}
-                    type="number"
-                    min="0"
-                    step="0.5"
-                    value={value || ''}
-                    disabled={currentBatch.lifecycleStatus === 'FINAL'}
-                    onChange={event => setter(Math.max(0, Number(event.target.value) || 0))}
-                    className="mt-1.5 min-h-[44px] w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 font-mono text-base text-white disabled:opacity-50 focus-ring"
-                  />
-                </label>
-              ))}
-            </div>
-            {saveAlert && <p role="status" className="text-center text-xs font-bold text-emerald-300">Pemakaian berhasil disimpan.</p>}
-            <button type="submit" disabled={currentBatch.lifecycleStatus === 'FINAL'} className="min-h-[48px] w-full rounded-xl bg-cyan-600 px-4 py-3 text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-40 focus-ring">
-              <Save className="mr-1.5 inline h-4 w-4" /> Simpan Pemakaian
-            </button>
-          </form>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div

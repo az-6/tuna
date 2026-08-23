@@ -351,7 +351,7 @@ export const Step3HitungHpp: React.FC = () => {
               Akses HPP dibatasi
             </h1>
             <p className="text-xs sm:text-sm text-slate-400 max-w-sm mx-auto">
-              Akun dengan peran <strong>{profile?.role || 'staff'}</strong> dapat mencatat produksi, tetapi hanya owner atau manager yang dapat melihat data biaya dan laba.
+              Akun pegawai dapat mengelola input produksi dan harga, tetapi hanya owner yang dapat melihat laporan HPP dan laba.
             </p>
           </div>
 
@@ -382,7 +382,7 @@ export const Step3HitungHpp: React.FC = () => {
     );
   }
 
-  // Tampilan laporan untuk owner/manager.
+  // Tampilan laporan khusus owner.
   return (
     <div className="space-y-4 sm:space-y-6 max-w-4xl mx-auto">
 
@@ -491,7 +491,7 @@ export const Step3HitungHpp: React.FC = () => {
             </span>
             <p className="text-amber-200/90 leading-relaxed">
               {hpp.isFinalizable
-                ? 'Perhitungan telah lolos pemeriksaan dasar. Finalisasi harus dikonfirmasi owner/manager agar snapshot HPP tersimpan dan batch dikunci.'
+                ? 'Perhitungan telah lolos pemeriksaan dasar. Finalisasi harus dikonfirmasi owner agar snapshot HPP tersimpan dan batch dikunci.'
                 : 'Kalkulasi di bawah masih provisional. Selesaikan seluruh pemeriksaan sebelum finalisasi.'}
             </p>
             {!hpp.isFinalizable && (

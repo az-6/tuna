@@ -226,7 +226,7 @@ export const Step2MejaPotong: React.FC = () => {
 
       {activeBatch.lifecycleStatus === 'FINAL' && (
         <div className="rounded-xl border border-emerald-500/40 bg-emerald-950/70 p-3 text-xs font-semibold text-emerald-200" role="status">
-          Batch FINAL terkunci. Hasil potong hanya dapat dibaca sampai batch dibuka kembali oleh owner/manager.
+          Batch FINAL terkunci. Hasil potong hanya dapat dibaca sampai batch dibuka kembali oleh owner.
         </div>
       )}
 

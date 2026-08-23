@@ -15,6 +15,7 @@ export const SimpleNavbar: React.FC = () => {
     activeBatchFish,
     canViewHpp,
     canManageFinancials,
+    canManageProduction,
     profile,
     signOut,
     clearAllData,
@@ -231,7 +232,7 @@ export const SimpleNavbar: React.FC = () => {
             {/* Add New Batch Button */}
             <button
               ref={addModalTriggerRef}
-              disabled={!canManageFinancials}
+              disabled={!canManageProduction}
               onClick={() => {
                 setNelayanName('');
                 setBatchCode(`BATCH-${getJakartaDateString().replace(/-/g, '')}-${String(batches.length + 1).padStart(2, '0')}`);
@@ -274,7 +275,7 @@ export const SimpleNavbar: React.FC = () => {
         </div>
 
         {/* Mobile action bar keeps primary controls reachable without horizontal overflow. */}
-        <div className={`grid gap-1.5 pb-2.5 lg:hidden ${profile?.role === 'owner' ? 'grid-cols-[minmax(0,1fr)_44px_44px_44px]' : canManageFinancials ? 'grid-cols-[minmax(0,1fr)_44px_44px]' : 'grid-cols-[minmax(0,1fr)_44px]'}`}>
+        <div className={`grid gap-1.5 pb-2.5 lg:hidden ${profile?.role === 'owner' ? 'grid-cols-[minmax(0,1fr)_44px_44px_44px]' : 'grid-cols-[minmax(0,1fr)_44px_44px]'}`}>
           <div className="relative flex min-h-[44px] min-w-0 items-center rounded-xl border border-slate-700 bg-slate-950 px-2.5 text-xs">
             <Ship className="me-1.5 h-4 w-4 shrink-0 text-cyan-400" aria-hidden="true" />
             <label htmlFor="mobile-batch-select" className="sr-only">Pilih batch</label>
@@ -290,7 +291,7 @@ export const SimpleNavbar: React.FC = () => {
               <UserPlus className="h-4 w-4" />
             </button>
           ) : null}
-          {canManageFinancials ? (
+          {canManageProduction ? (
             <button type="button" onClick={() => { setNelayanName(''); setBatchCode(`BATCH-${getJakartaDateString().replace(/-/g, '')}-${String(batches.length + 1).padStart(2, '0')}`); setShowAddModal(true); }} className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl bg-cyan-600 text-white focus-ring" aria-label="Tambah batch">
               <Plus className="h-4 w-4" />
             </button>

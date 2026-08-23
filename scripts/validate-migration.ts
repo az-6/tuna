@@ -146,20 +146,55 @@ try {
   await db.query(`update public.organization_members set role = 'staff' where user_id = $1::uuid`, [userId]);
   await db.exec('set role authenticated');
   const staffFinancialRows = await db.query<{ count: number }>('select count(*)::int count from public.batch_financials');
-  if (Number(staffFinancialRows.rows[0]?.count) !== 0) throw new Error('RLS membuka finansial kepada staff.');
-  let staffCreateDenied = false;
-  try {
-    await db.query(
-      `select public.create_batch($1::uuid, 'STAFF-FAIL', 'Tidak Sah', current_date, '{}'::jsonb, '{}'::jsonb)`,
-      ['dddddddd-dddd-4ddd-8ddd-dddddddddddd']
-    );
-  } catch {
-    staffCreateDenied = true;
+  if (Number(staffFinancialRows.rows[0]?.count) !== 1) throw new Error('Staff tidak dapat membaca input harga produksi organisasinya.');
+
+  const staffBatchId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  await db.query(
+    `select public.create_batch($1::uuid, 'STAFF-OK', 'Kapal Staff', current_date, '{"jmlEsBalok":2}'::jsonb, '{"hargaBeliGradeC":44000}'::jsonb)`,
+    [staffBatchId]
+  );
+  await db.query(
+    `select public.patch_batch_full($1::uuid, '{"nelayan":"Kapal Staff Edit","operational_data":{"jmlStyrofoamBox":3}}'::jsonb, '{"hargaBeliGradeC":45000}'::jsonb)`,
+    [staffBatchId]
+  );
+  const staffBatch = await db.query<{ nelayan: string; price: number }>(`
+    select b.nelayan, (f.financial_data ->> 'hargaBeliGradeC')::int price
+    from public.batches b join public.batch_financials f on f.batch_id = b.id
+    where b.id = $1::uuid
+  `, [staffBatchId]);
+  if (staffBatch.rows[0]?.nelayan !== 'Kapal Staff Edit' || Number(staffBatch.rows[0]?.price) !== 45000) {
+    throw new Error('Staff gagal membuat atau mengubah input produksi dan harga.');
   }
-  if (!staffCreateDenied) throw new Error('Staff seharusnya tidak dapat membuat batch finansial baru.');
+
+  let staffFinalizeDenied = false;
+  try {
+    await db.query(`select public.finalize_batch($1::uuid, '{}'::jsonb)`, [staffBatchId]);
+  } catch {
+    staffFinalizeDenied = true;
+  }
+  if (!staffFinalizeDenied) throw new Error('Staff tidak boleh finalisasi atau membuat snapshot HPP.');
+
+  const staffSnapshots = await db.query<{ count: number }>('select count(*)::int count from public.hpp_snapshots');
+  if (Number(staffSnapshots.rows[0]?.count) !== 0) throw new Error('RLS membuka snapshot HPP kepada staff.');
+
+  await db.query(`delete from public.batches where id = $1::uuid`, [staffBatchId]);
+  const staffBatchAfterDelete = await db.query<{ count: number }>(
+    'select count(*)::int count from public.batches where id = $1::uuid',
+    [staffBatchId]
+  );
+  if (Number(staffBatchAfterDelete.rows[0]?.count) !== 1) throw new Error('Staff tidak boleh menghapus batch.');
   await db.exec('reset role');
 
-  console.log('Migration integration: PASS (username, employee provisioning, RPC, RLS roles, FINAL lock, snapshot, audit, reopen)');
+  const roles = await db.query<{ enumlabel: string }>(`
+    select enumlabel from pg_enum
+    where enumtypid = 'public.app_role'::regtype
+    order by enumsortorder
+  `);
+  if (roles.rows.map(row => row.enumlabel).join(',') !== 'owner,staff') {
+    throw new Error('Role aplikasi harus hanya owner dan staff.');
+  }
+
+  console.log('Migration integration: PASS (owner/staff roles, staff production access, owner-only HPP lifecycle, RLS, audit)');
 } finally {
   await db.close();
 }

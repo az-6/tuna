@@ -23,7 +23,7 @@ function jsonResponse(origin: string, status: number, body: Record<string, unkno
     status,
     headers: {
       'Access-Control-Allow-Origin': origin || 'null',
-      'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info',
+      'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-application-name, x-client-info',
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
       'Cache-Control': 'no-store',
       'Vary': 'Origin'
@@ -39,7 +39,7 @@ Deno.serve(async (request: Request) => {
       status: 204,
       headers: {
         'Access-Control-Allow-Origin': origin || 'null',
-        'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info',
+        'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-application-name, x-client-info',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
         'Vary': 'Origin'
       }

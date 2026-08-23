@@ -1,5 +1,5 @@
 export type FishGrade = 'A' | 'B' | 'C' | 'Reject';
-export type AppRole = 'owner' | 'manager' | 'staff';
+export type AppRole = 'owner' | 'staff';
 
 export interface UserProfile {
   id: string;

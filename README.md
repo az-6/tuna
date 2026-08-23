@@ -16,7 +16,6 @@ Salin `.env.example` ke `.env.local` dan isi Project URL serta Publishable Key S
 
 ## Model akses
 
-- `owner`: seluruh kontrol finansial serta pembuatan akun pegawai.
-- `manager`: data biaya, HPP, pengaturan harga, finalisasi, reopen, dan penghapusan batch WIP.
-- `staff`: penerimaan, hasil potong, dan kuantitas kemasan; tidak dapat membaca tabel finansial melalui RLS.
+- `owner`: seluruh input produksi dan harga, laporan HPP/laba, finalisasi, reopen, penghapusan batch WIP, serta pembuatan akun pegawai.
+- `staff`: seluruh proses produksi WIP, termasuk batch/nelayan, ikan, hasil potong, harga beli, serta jumlah dan harga kemasan. Laporan HPP/laba dan lifecycle FINAL tetap khusus owner.
 - Batch `FINAL`: immutable pada sisi UI dan database sampai prosedur reopen dijalankan dengan alasan audit.

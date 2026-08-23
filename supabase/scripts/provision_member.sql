@@ -32,7 +32,7 @@ begin
 
   update public.organization_members
   set organization_id = target_organization,
-      role = 'staff', -- ubah menjadi 'manager' bila memang disetujui owner
+      role = 'staff',
       username = target_username
   where user_id = target_user;
 

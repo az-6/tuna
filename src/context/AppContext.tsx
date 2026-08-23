@@ -27,6 +27,7 @@ interface AppContextType {
   retrySync: () => Promise<void>;
   canViewHpp: boolean;
   canManageFinancials: boolean;
+  canManageProduction: boolean;
   batches: BatchInfo[];
   activeBatchId: string;
   setActiveBatchId: (id: string) => void;
@@ -162,8 +163,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     () => fishRecords.filter(fish => fish.batchId === activeBatch.id),
     [fishRecords, activeBatch.id]
   );
-  const canManageFinancials = profile?.role === 'owner' || profile?.role === 'manager';
-  const canViewHpp = canManageFinancials;
+  const canManageFinancials = profile?.role === 'owner';
+  const canViewHpp = profile?.role === 'owner';
+  const canManageProduction = Boolean(profile);
 
   const runMutation = useCallback(async (operation: () => Promise<void>, successMessage: string) => {
     if (!session) throw new Error('Sesi telah berakhir. Silakan masuk kembali.');
@@ -239,7 +241,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const addBatch = async (input: BatchInfo) => {
     if (!profile) throw new Error('Profil organisasi belum tersedia.');
-    if (!canManageFinancials) throw new Error('Hanya owner/manager dapat membuat batch baru.');
     const batch: BatchInfo = {
       ...input,
       id: newUuid(),
@@ -295,27 +296,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updatePackagingPrices = async (updated: Partial<PackagingPrices>) => {
-    if (!profile || !canManageFinancials) throw new Error('Hanya owner/manager dapat mengubah harga kemasan.');
+    if (!profile) throw new Error('Profil organisasi belum tersedia.');
     const next = { ...packagingPrices, ...updated };
     setPackagingPrices(next);
     await runMutation(() => savePackagingPrices(profile, next), 'Master harga kemasan tersimpan.');
   };
 
   const finalizeBatch = async (id: string, hpp: HppCalculationResult) => {
-    if (!canManageFinancials) throw new Error('Hanya owner/manager dapat finalisasi.');
+    if (!canManageFinancials) throw new Error('Hanya owner dapat finalisasi.');
     if (!hpp.isFinalizable) throw new Error(hpp.finalizationIssues.join('. '));
     await runMutation(() => finalizeBatchRecord(id, hpp), 'Batch berhasil difinalisasi dan dikunci.');
     if (session) await hydrate(session);
   };
 
   const reopenBatch = async (id: string, reason: string) => {
-    if (!canManageFinancials) throw new Error('Hanya owner/manager dapat reopen batch.');
+    if (!canManageFinancials) throw new Error('Hanya owner dapat membuka kembali batch.');
     await runMutation(() => reopenBatchRecord(id, reason), 'Batch dibuka kembali dengan audit reason.');
     if (session) await hydrate(session);
   };
 
   const clearAllData = async () => {
-    if (!profile || !canManageFinancials) throw new Error('Hanya owner/manager dapat menghapus batch WIP.');
+    if (!profile || !canManageFinancials) throw new Error('Hanya owner dapat menghapus batch WIP.');
     await runMutation(() => removeAllWipBatches(profile.organizationId), 'Semua batch WIP dihapus. Batch FINAL tetap aman.');
     if (session) await hydrate(session);
   };
@@ -323,7 +324,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   return (
     <AppContext.Provider value={{
       isConfigured: isSupabaseConfigured, session, profile, authLoading, dataLoading, syncState, syncMessage,
-      signIn, signUp, createEmployee, signOut, retrySync, canViewHpp, canManageFinancials,
+      signIn, signUp, createEmployee, signOut, retrySync, canViewHpp, canManageFinancials, canManageProduction,
       batches, activeBatchId, setActiveBatchId, activeBatch, fishRecords, activeBatchFish,
       packagingPrices, updatePackagingPrices, activeTab, setActiveTab,
       showPackagingModal, openPackagingModal: () => setShowPackagingModal(true),

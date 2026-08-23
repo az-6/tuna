@@ -12,7 +12,7 @@ export const Step1IkanMasuk: React.FC = () => {
     deleteFishRecord,
     setActiveTab,
     updateBatch,
-    canManageFinancials
+    canManageProduction
   } = useApp();
 
   // Form State for Fish Entry
@@ -159,7 +159,7 @@ export const Step1IkanMasuk: React.FC = () => {
               <h1 id="batch-info-heading" className="text-base sm:text-xl font-extrabold text-white tracking-tight truncate">
                 {activeBatch.nelayan}
               </h1>
-              {canManageFinancials && activeBatch.lifecycleStatus !== 'FINAL' && <button
+              {canManageProduction && activeBatch.lifecycleStatus !== 'FINAL' && <button
                 ref={editTriggerRef}
                 onClick={handleOpenEdit}
                 className="p-2 text-slate-400 hover:text-cyan-300 hover:bg-slate-800 rounded-xl transition-colors focus-ring min-h-[44px] min-w-[44px] flex items-center justify-center shrink-0"
@@ -188,7 +188,7 @@ export const Step1IkanMasuk: React.FC = () => {
         </div>
 
         {/* Harga Beli Info Cards */}
-        {canManageFinancials ? <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2.5 text-xs font-mono">
+        {canManageProduction ? <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2.5 text-xs font-mono">
           <div className="bg-slate-950 p-2 sm:p-2.5 rounded-xl border border-slate-800">
             <span className="text-slate-400 text-[10px] sm:text-[11px] block font-sans">Grade A</span>
             <span className="font-bold text-emerald-400 text-xs sm:text-sm tabular-nums">{formatRupiah(activeBatch.hargaBeliGradeA || 50000)}</span>
@@ -207,13 +207,13 @@ export const Step1IkanMasuk: React.FC = () => {
           </div>
         </div> : (
           <div className="rounded-xl border border-slate-800 bg-slate-950 p-3 text-xs text-slate-300">
-            Harga beli dan biaya armada disembunyikan untuk peran staff.
+            Data harga produksi tidak tersedia.
           </div>
         )}
       </section>
 
       {/* Modal Edit Nelayan & Batch Info */}
-      {isEditingBatch && canManageFinancials && activeBatch.lifecycleStatus !== 'FINAL' && (
+      {isEditingBatch && canManageProduction && activeBatch.lifecycleStatus !== 'FINAL' && (
         <div
           className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
           role="dialog"
@@ -441,7 +441,7 @@ export const Step1IkanMasuk: React.FC = () => {
                   >
                     <span>Grade {g}</span>
                     <span className="text-[10px] font-mono opacity-80">
-                      {canManageFinancials
+                      {canManageProduction
                         ? (g === 'A' ? formatRupiah(activeBatch.hargaBeliGradeA || 50000) : g === 'B' ? formatRupiah(activeBatch.hargaBeliGradeB) : formatRupiah(activeBatch.hargaBeliGradeC))
                         : 'Pilih mutu nota'}
                     </span>

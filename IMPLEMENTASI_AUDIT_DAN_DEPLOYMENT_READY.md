@@ -5,7 +5,7 @@ Target: Vercel (frontend) dan Supabase (Auth + PostgreSQL)
 
 ## Ringkasan
 
-Temuan prioritas tinggi dari audit sebelumnya telah diimplementasikan pada jalur aplikasi utama. Ledger browser dan password HPP lokal diganti dengan Supabase Auth, penyimpanan PostgreSQL, RLS organisasi, dan peran `owner/manager/staff`. Status FINAL sekarang merupakan state persisten yang hanya dapat dibuat melalui prosedur finalisasi, bukan kesimpulan otomatis dari filter layar.
+Temuan prioritas tinggi dari audit sebelumnya telah diimplementasikan pada jalur aplikasi utama. Ledger browser dan password HPP lokal diganti dengan Supabase Auth, penyimpanan PostgreSQL, RLS organisasi, dan peran `owner/staff`. Status FINAL sekarang merupakan state persisten yang hanya dapat dibuat oleh owner melalui prosedur finalisasi, bukan kesimpulan otomatis dari filter layar.
 
 Autentikasi pengguna kini hanya meminta username dan password. Supabase menerima alias identitas internal karena API password bawaannya memerlukan email/phone, tetapi alias tersebut bukan data pengguna, tidak dikumpulkan, tidak ditampilkan, dan tidak dipakai untuk komunikasi.
 
@@ -14,7 +14,7 @@ Autentikasi pengguna kini hanya meminta username dan password. Supabase menerima
 1. Cakupan kalkulasi `DONE_ONLY` tidak lagi mengubah status batch menjadi FINAL bila masih ada ikan pending pada batch penuh.
 2. Finalisasi memerlukan: ada ikan, seluruh ikan selesai, ada loin saleable, rekonsiliasi biaya cocok, dan output fisik tidak melebihi input.
 3. Finalisasi menyimpan snapshot HPP, actor, versi batch, waktu, dan audit log; trigger database membuat batch FINAL immutable.
-4. Reopen hanya untuk owner/manager dan memerlukan alasan minimal 10 karakter.
+4. Reopen hanya untuk owner dan memerlukan alasan minimal 10 karakter.
 5. Kredit by-product dibatasi sebesar gross cost pool sehingga HPP blended tidak negatif. Kelebihan dicatat terpisah sebagai pendapatan by-product di atas cost pool.
 6. Kredit by-product per grade dialokasikan proporsional terhadap biaya sebelum kredit, menjaga HPP grade tidak negatif dan tetap tie-out ke net cost pool.
 7. `customMaterials` yang malformed tidak lagi menjatuhkan mesin kalkulasi.

@@ -15,7 +15,7 @@ npx supabase link --project-ref YOUR_PROJECT_REF
 npx supabase db push
 ```
 
-Migration dalam `supabase/migrations/` membuat database multi-organisasi, RLS, audit HPP, lifecycle FINAL, username unik, dan RPC provisioning pegawai.
+Migration dalam `supabase/migrations/` membuat database multi-organisasi, RLS, audit HPP, lifecycle FINAL, username unik, dua role (`owner`/`staff`), dan RPC provisioning pegawai.
 
 Di Supabase Dashboard → Authentication → Providers → Email:
 
@@ -68,7 +68,7 @@ Environment variable baru hanya berlaku pada deployment baru. `vercel.json` suda
 
 1. Daftar/masuk menggunakan username owner dan password.
 2. Dari tombol **Akun Pegawai**, buat akun staff; keluar lalu masuk memakai akun tersebut.
-3. Pastikan staff tidak dapat membuat akun lain, membuat batch, atau membaca harga/HPP.
+3. Pastikan staff dapat membuat batch/nelayan serta mengubah input produksi dan harga, tetapi tidak dapat membuat akun lain, membuka laporan HPP/laba, finalisasi, reopen, atau menghapus batch.
 4. Buat batch WIP dan pastikan refresh tidak menghilangkan data.
 5. Masukkan ikan, loin, kemasan, dan by-product.
 6. Pastikan batch dengan ikan pending tetap WIP pada cakupan “ikan selesai”.

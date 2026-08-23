@@ -83,16 +83,11 @@ export async function createEmployeeAccount(input: EmployeeAccountInput): Promis
 
 export async function loadWorkspace(profile: UserProfile, defaults: PackagingPrices): Promise<WorkspaceData> {
   const client = requireSupabase();
-  const canReadFinancials = profile.role === 'owner' || profile.role === 'manager';
   const [batchResult, fishResult, settingsResult, financialResult] = await Promise.all([
     client.from('batches').select('*').eq('organization_id', profile.organizationId).order('batch_date', { ascending: false }),
     client.from('fish_records').select('*').eq('organization_id', profile.organizationId).order('no_ikan'),
-    canReadFinancials
-      ? client.from('organization_settings').select('packaging_prices').eq('organization_id', profile.organizationId).maybeSingle()
-      : Promise.resolve({ data: null, error: null }),
-    canReadFinancials
-      ? client.from('batch_financials').select('batch_id, financial_data').eq('organization_id', profile.organizationId)
-      : Promise.resolve({ data: [], error: null })
+    client.from('organization_settings').select('packaging_prices').eq('organization_id', profile.organizationId).maybeSingle(),
+    client.from('batch_financials').select('batch_id, financial_data').eq('organization_id', profile.organizationId)
   ]);
 
   assertNoError(batchResult.error, 'Gagal memuat batch.');
@@ -142,15 +137,12 @@ export async function loadWorkspace(profile: UserProfile, defaults: PackagingPri
   return {
     batches,
     fishRecords,
-    packagingPrices: canReadFinancials
-      ? { ...defaults, ...((settingsResult.data as any)?.packaging_prices || {}) }
-      : { ...defaults }
+    packagingPrices: { ...defaults, ...((settingsResult.data as any)?.packaging_prices || {}) }
   };
 }
 
 export async function createBatch(profile: UserProfile, batch: BatchInfo): Promise<void> {
   const client = requireSupabase();
-  if (profile.role === 'staff') throw new Error('Hanya owner/manager dapat membuat batch baru.');
   const { error } = await client.rpc('create_batch', {
     p_batch_id: batch.id,
     p_code: batch.code || batch.id,
@@ -171,7 +163,6 @@ export async function updateBatchRecord(profile: UserProfile, id: string, update
   if (updated.tanggal !== undefined) batchPatch.batch_date = updated.tanggal;
   if (Object.keys(operational).length) batchPatch.operational_data = operational;
   const financial = pickBatchFields(updated, financialKeys);
-  if (Object.keys(financial).length && profile.role === 'staff') throw new Error('Anda tidak memiliki izin mengubah data finansial.');
   if (!Object.keys(batchPatch).length && !Object.keys(financial).length) return;
   const { error } = await client.rpc('patch_batch_full', {
     p_batch_id: id,
@@ -234,7 +225,6 @@ export async function removeFish(id: string): Promise<void> {
 }
 
 export async function savePackagingPrices(profile: UserProfile, prices: PackagingPrices): Promise<void> {
-  if (profile.role === 'staff') throw new Error('Anda tidak memiliki izin mengubah harga kemasan.');
   const { error } = await requireSupabase().from('organization_settings').upsert({
     organization_id: profile.organizationId,
     packaging_prices: prices,
