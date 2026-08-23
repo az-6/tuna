@@ -7,7 +7,13 @@ export interface UserProfile {
   organizationName: string;
   displayName: string;
   role: AppRole;
-  email: string;
+  username: string;
+}
+
+export interface EmployeeAccountInput {
+  username: string;
+  displayName: string;
+  password: string;
 }
 
 export interface LoinItem {

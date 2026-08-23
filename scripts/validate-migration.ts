@@ -1,10 +1,5 @@
 import { PGlite } from '@electric-sql/pglite';
 
-const migrationPath = new URL('../supabase/migrations/202608230001_initial_production.sql', import.meta.url);
-const migration = (await Bun.file(migrationPath).text()).replace(
-  'create extension if not exists pgcrypto;',
-  '-- pgcrypto is available on Supabase; PGlite provides gen_random_uuid natively.'
-);
 const db = new PGlite();
 const userId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const batchId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -13,6 +8,7 @@ try {
   await db.exec(`
     create role anon nologin;
     create role authenticated nologin;
+    create role service_role nologin;
     create schema auth;
     create table auth.users (
       id uuid primary key,
@@ -26,12 +22,56 @@ try {
     grant execute on function auth.uid() to authenticated;
   `);
 
-  await db.exec(migration);
+  const migrationFiles: string[] = [];
+  const migrationGlob = new Bun.Glob('supabase/migrations/*.sql');
+  for await (const path of migrationGlob.scan({ cwd: process.cwd() })) {
+    migrationFiles.push(path);
+  }
+  migrationFiles.sort();
+  for (const path of migrationFiles) {
+    const sql = (await Bun.file(path).text()).replace(
+      'create extension if not exists pgcrypto;',
+      '-- pgcrypto is available on Supabase; PGlite provides gen_random_uuid natively.'
+    );
+    await db.exec(sql);
+  }
   await db.exec(`select set_config('app.test_user_id', '${userId}', false)`);
   await db.exec(`
     insert into auth.users(id, email, raw_user_meta_data)
-    values ('${userId}', 'owner@example.com', '{"display_name":"Owner Test","organization_name":"KTG Test"}');
+    values ('${userId}', 'owner@users.ktg.invalid', '{"username":"owner_test","display_name":"Owner Test","organization_name":"KTG Test"}');
   `);
+
+  const employeeId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+  await db.exec(`
+    insert into auth.users(id, email, raw_user_meta_data)
+    values ('${employeeId}', 'pegawai_test@users.ktg.invalid', '{"username":"pegawai_test","display_name":"Pegawai Test","organization_name":"Pending Employee"}');
+  `);
+  await db.query(
+    `select public.provision_employee_account($1::uuid, $2::uuid, $3, $4)`,
+    [userId, employeeId, 'pegawai_test', 'Pegawai Test']
+  );
+  const employee = await db.query<{ role: string; username: string; same_org: boolean }>(`
+    select employee.role::text, employee.username,
+      employee.organization_id = owner.organization_id same_org
+    from public.organization_members employee
+    join public.organization_members owner on owner.user_id = $1::uuid
+    where employee.user_id = $2::uuid
+  `, [userId, employeeId]);
+  if (!employee.rows[0] || employee.rows[0].role !== 'staff' || !employee.rows[0].same_org) {
+    throw new Error('Provisioning pegawai tidak menghasilkan role staff pada organisasi owner.');
+  }
+
+  const cleanupUserId = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+  await db.exec(`
+    insert into auth.users(id, email, raw_user_meta_data)
+    values ('${cleanupUserId}', 'cleanup_test@users.ktg.invalid', '{"username":"cleanup_test","display_name":"Cleanup Test","organization_name":"Pending Employee"}');
+  `);
+  await db.query(`select public.cleanup_provisional_employee($1::uuid)`, [cleanupUserId]);
+  const cleanupMembership = await db.query<{ count: number }>(
+    'select count(*)::int count from public.organization_members where user_id = $1::uuid',
+    [cleanupUserId]
+  );
+  if (Number(cleanupMembership.rows[0]?.count) !== 0) throw new Error('Cleanup akun provisional tidak membersihkan membership.');
 
   await db.query(
     `select public.create_batch($1::uuid, $2, $3, $4::date, $5::jsonb, $6::jsonb)`,
@@ -119,7 +159,7 @@ try {
   if (!staffCreateDenied) throw new Error('Staff seharusnya tidak dapat membuat batch finansial baru.');
   await db.exec('reset role');
 
-  console.log('Migration integration: PASS (bootstrap, RPC, RLS roles, FINAL lock, snapshot, audit, reopen)');
+  console.log('Migration integration: PASS (username, employee provisioning, RPC, RLS roles, FINAL lock, snapshot, audit, reopen)');
 } finally {
   await db.close();
 }

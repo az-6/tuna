@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "bun test",
     "test:db": "bun scripts/validate-migration.ts",
-    "check": "bun test && bun run test:db && bun run typecheck && vite build"
+    "test:edge": "bun scripts/validate-edge-function.ts",
+    "check": "bun test && bun run test:db && bun run test:edge && bun run typecheck && vite build"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",

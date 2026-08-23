@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { Anchor, ArrowRight, Database, Loader2, ShieldCheck } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { normalizeUsername } from '../lib/username';
 
 export const AuthScreen: React.FC = () => {
   const { signIn, signUp } = useApp();
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [organizationName, setOrganizationName] = useState('KTG Tuna');
@@ -18,9 +19,9 @@ export const AuthScreen: React.FC = () => {
     setMessage(null);
     try {
       if (mode === 'signin') {
-        await signIn(email, password);
+        await signIn(username, password);
       } else {
-        const text = await signUp(email, password, displayName, organizationName);
+        const text = await signUp(username, password, displayName, organizationName);
         setMessage({ type: 'success', text });
       }
     } catch (error) {
@@ -87,12 +88,29 @@ export const AuthScreen: React.FC = () => {
               </>
             )}
             <div>
-              <label htmlFor="auth-email" className="block text-sm font-semibold text-slate-200 mb-1.5">Email</label>
-              <input id="auth-email" type="email" required value={email} onChange={event => setEmail(event.target.value)} className="w-full min-h-[48px] rounded-xl bg-slate-900 border border-slate-700 px-4 text-base focus-ring" autoComplete="email" inputMode="email" />
+              <label htmlFor="auth-username" className="block text-sm font-semibold text-slate-200 mb-1.5">Username</label>
+              <input
+                id="auth-username"
+                type="text"
+                required
+                minLength={3}
+                maxLength={32}
+                pattern="[a-z0-9][a-z0-9_]{1,30}[a-z0-9]"
+                value={username}
+                onChange={event => setUsername(normalizeUsername(event.target.value))}
+                className="w-full min-h-[48px] rounded-xl bg-slate-900 border border-slate-700 px-4 text-base focus-ring"
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
+                aria-describedby="auth-username-hint"
+                placeholder="contoh: budi_produksi"
+              />
+              <p id="auth-username-hint" className="mt-1.5 text-xs text-slate-400">3–32 karakter: huruf kecil, angka, dan underscore.</p>
             </div>
             <div>
               <label htmlFor="auth-password" className="block text-sm font-semibold text-slate-200 mb-1.5">Password</label>
-              <input id="auth-password" type="password" required minLength={8} value={password} onChange={event => setPassword(event.target.value)} className="w-full min-h-[48px] rounded-xl bg-slate-900 border border-slate-700 px-4 text-base focus-ring" autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} />
+              <input id="auth-password" type="password" required minLength={mode === 'signup' ? 10 : 1} value={password} onChange={event => setPassword(event.target.value)} className="w-full min-h-[48px] rounded-xl bg-slate-900 border border-slate-700 px-4 text-base focus-ring" autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} aria-describedby={mode === 'signup' ? 'auth-password-hint' : undefined} />
+              {mode === 'signup' && <p id="auth-password-hint" className="mt-1.5 text-xs text-slate-400">Minimal 10 karakter.</p>}
             </div>
 
             {message && (

@@ -1,16 +1,13 @@
 # Deployment KTG Tuna — Supabase + Vercel
 
-Dokumen ini adalah runbook produksi. Frontend hanya memakai Supabase Project URL dan **Publishable Key**. Jangan pernah memasukkan `service_role` key ke `.env`, source code, atau Vercel karena seluruh variabel `VITE_*` akan tertanam di bundle browser.
+Frontend hanya memakai Supabase Project URL dan Publishable Key. Jangan pernah memasukkan secret/service-role key ke `.env`, source code, atau Vercel karena variabel `VITE_*` tertanam dalam bundle browser.
 
 ## 1. Prasyarat
 
-- Bun terpasang.
-- Proyek Supabase dan proyek Vercel tersedia.
-- CLI: `npx supabase --version` dan `npx vercel --version`.
+- Bun, Supabase CLI, proyek Supabase, dan proyek Vercel.
+- Domain produksi atau URL Vercel yang akan diizinkan memanggil Edge Function.
 
-## 2. Buat database
-
-Login dan tautkan repository ke proyek Supabase:
+## 2. Database dan autentikasi
 
 ```bash
 npx supabase login
@@ -18,24 +15,31 @@ npx supabase link --project-ref YOUR_PROJECT_REF
 npx supabase db push
 ```
 
-Migration utama berada di `supabase/migrations/202608230001_initial_production.sql`. Migration membuat tabel multi-organisasi, RLS, kontrol peran, audit log, snapshot HPP, prosedur finalisasi/reopen, serta trigger immutable untuk batch FINAL.
+Migration dalam `supabase/migrations/` membuat database multi-organisasi, RLS, audit HPP, lifecycle FINAL, username unik, dan RPC provisioning pegawai.
 
-Setelah push, buka Supabase Dashboard → Authentication → URL Configuration:
+Di Supabase Dashboard → Authentication → Providers → Email:
 
-- Site URL: URL produksi Vercel, misalnya `https://ops.example.com`.
-- Redirect URLs: tambahkan URL produksi dan URL preview yang memang dipercaya.
-- Untuk go-live, aktifkan konfirmasi email dan SMTP produksi. Jangan mengandalkan SMTP bawaan untuk trafik produksi.
+- Biarkan provider Email aktif karena Supabase Auth memakai alias identitas internal di belakang layar.
+- Nonaktifkan **Confirm Email**. Sistem tidak meminta, mengirim, atau menampilkan alamat email pengguna.
+- Login pada aplikasi tetap hanya memakai username dan password.
 
-## 3. Konfigurasi lokal
+## 3. Edge Function akun pegawai
 
-Salin `.env.example` menjadi `.env.local`, lalu isi:
+```bash
+npx supabase secrets set APP_ORIGINS=https://ops.example.com,https://YOUR_PROJECT.vercel.app
+npx supabase functions deploy create-employee --no-verify-jwt
+```
+
+`verify_jwt` dimatikan pada gateway untuk kompatibilitas signing key baru, tetapi function tetap memverifikasi access token melalui `auth.getUser()` dan memeriksa role owner. Secret key hanya tersedia pada runtime Supabase dan tidak boleh disalin ke Vercel.
+
+## 4. Konfigurasi frontend
+
+Salin `.env.example` menjadi `.env.local`:
 
 ```dotenv
 VITE_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_REPLACE_ME
 ```
-
-Jalankan pemeriksaan:
 
 ```bash
 bun install --frozen-lockfile
@@ -43,11 +47,11 @@ bun run check
 bun run dev
 ```
 
-`bun run check` juga mengeksekusi migration pada PostgreSQL-WASM (PGlite) dan menguji bootstrap akun, RPC batch, FINAL lock, snapshot, audit, serta reopen. Tetap jalankan migration pada staging Supabase sebelum production karena pemeriksaan lokal tidak menggantikan pengujian konfigurasi proyek nyata.
+`bun run check` menguji seluruh migration melalui PGlite, termasuk username, provisioning pegawai, RPC/RLS, FINAL lock, snapshot, audit, dan reopen. Tetap uji pada staging Supabase sebelum production.
 
-Buat akun pertama melalui layar daftar. Trigger database membuat organisasi dan memberi akun pertama peran `owner`.
+Buat akun pertama melalui layar daftar menggunakan username dan password. Akun tersebut menjadi owner organisasi.
 
-## 4. Deploy ke Vercel
+## 5. Vercel
 
 ```bash
 npx vercel link
@@ -58,27 +62,30 @@ npx vercel env add VITE_SUPABASE_PUBLISHABLE_KEY preview
 npx vercel --prod
 ```
 
-Alternatifnya, tambahkan dua environment variable tersebut melalui Project Settings → Environment Variables. Perubahan environment variable baru berlaku pada deployment baru, jadi lakukan redeploy. `vercel.json` sudah menentukan build Bun/Vite, fallback SPA, cache aset, dan header keamanan.
+Environment variable baru hanya berlaku pada deployment baru. `vercel.json` sudah mengatur build Bun/Vite, fallback SPA, cache aset, CSP, dan security headers.
 
-## 5. Pemeriksaan sesudah deployment
+## 6. Pemeriksaan go-live
 
-1. Daftar/masuk menggunakan email produksi.
-2. Buat batch WIP dan pastikan refresh browser tidak menghilangkan data.
-3. Masukkan satu ikan, catat loin, kemasan, dan by-product.
-4. Pastikan batch dengan ikan pending tetap WIP walaupun tampilan HPP memakai cakupan “ikan selesai”.
-5. Finalisasi hanya setelah daftar pemeriksaan kosong; coba ubah ikan/batch dan pastikan database menolak.
-6. Reopen dengan alasan minimal 10 karakter; periksa `audit_logs` dan `hpp_snapshots` di Supabase.
-7. Uji akun `staff`: harga beli/HPP tidak terlihat, tetapi kuantitas operasional dapat dicatat.
-8. Unduh Excel dan cocokkan `SUM(biaya per grade)` terhadap `net cost pool`.
+1. Daftar/masuk menggunakan username owner dan password.
+2. Dari tombol **Akun Pegawai**, buat akun staff; keluar lalu masuk memakai akun tersebut.
+3. Pastikan staff tidak dapat membuat akun lain, membuat batch, atau membaca harga/HPP.
+4. Buat batch WIP dan pastikan refresh tidak menghilangkan data.
+5. Masukkan ikan, loin, kemasan, dan by-product.
+6. Pastikan batch dengan ikan pending tetap WIP pada cakupan “ikan selesai”.
+7. Finalisasi lalu pastikan database menolak perubahan pada batch FINAL.
+8. Reopen dengan alasan minimal 10 karakter; periksa `audit_logs` dan `hpp_snapshots`.
+9. Unduh Excel dan cocokkan total biaya per grade terhadap net cost pool.
 
-## 6. Menambahkan anggota tim
+## 7. Operasional akun pegawai
 
-Skema mendukung `owner`, `manager`, dan `staff`, satu organisasi per akun. Provisioning anggota lintas organisasi belum dibuka ke browser agar pengguna tidak bisa menaikkan perannya sendiri. Untuk tahap awal, buat pengguna lewat Supabase Dashboard lalu gunakan template administrator `supabase/scripts/provision_member.sql`. Setelah volume pengguna bertambah, gunakan server-side Edge Function dengan service-role key untuk alur undangan; jangan membuat RPC publik yang menerima role tanpa verifikasi owner.
+Owner membuat akun melalui tombol **Akun Pegawai**. Browser mengirim username, nama, dan password ke Edge Function; password ditangani Supabase Auth dan tidak pernah disimpan di tabel aplikasi atau audit log.
 
-## 7. Rollback
+Karena tidak ada email pengguna, reset password mandiri melalui email tidak tersedia. Untuk saat ini, pemulihan password dilakukan administrator melalui Supabase Authentication Dashboard. Template `supabase/scripts/provision_member.sql` tersedia sebagai jalur pemulihan administrator, bukan alur harian.
+
+## 8. Rollback
 
 - Frontend: pilih deployment Vercel terakhir yang sehat lalu Promote to Production.
-- Database: jangan menghapus migration yang sudah diterapkan. Buat migration korektif baru dan uji pada branch/staging Supabase.
-- Data FINAL: jangan diedit langsung; gunakan `reopen_batch` agar alasan dan actor tercatat.
+- Database: buat migration korektif baru; jangan menghapus migration yang sudah diterapkan.
+- Data FINAL: gunakan `reopen_batch`, jangan edit langsung.
 
-Referensi resmi: [Supabase JavaScript initialization](https://supabase.com/docs/reference/javascript/initializing), [Supabase Row Level Security](https://supabase.com/docs/guides/database/postgres/row-level-security), [Vercel untuk Vite](https://vercel.com/docs/frameworks/frontend/vite), dan [Vercel environment variables](https://vercel.com/docs/environment-variables/managing-environment-variables).
+Referensi resmi: [Supabase password auth](https://supabase.com/docs/guides/auth/passwords), [Supabase admin createUser](https://supabase.com/docs/reference/javascript/auth-admin-createuser), [Supabase Edge Function auth](https://supabase.com/docs/guides/functions/auth), [Supabase RLS](https://supabase.com/docs/guides/database/postgres/row-level-security), dan [Vercel Vite](https://vercel.com/docs/frameworks/frontend/vite).

@@ -2,6 +2,7 @@ import type { User } from '@supabase/supabase-js';
 import type {
   AppRole,
   BatchInfo,
+  EmployeeAccountInput,
   FishRecord,
   HppCalculationResult,
   PackagingPrices,
@@ -44,7 +45,7 @@ export async function loadProfile(user: User): Promise<UserProfile> {
   const client = requireSupabase();
   const { data, error } = await client
     .from('organization_members')
-    .select('organization_id, role, display_name, organizations(name)')
+    .select('organization_id, role, username, display_name, organizations(name)')
     .eq('user_id', user.id)
     .limit(1)
     .maybeSingle();
@@ -55,10 +56,29 @@ export async function loadProfile(user: User): Promise<UserProfile> {
     id: user.id,
     organizationId: data.organization_id,
     organizationName: (organization as { name?: string } | null)?.name || 'KTG Tuna',
-    displayName: data.display_name || user.email || 'Pengguna',
+    displayName: data.display_name || data.username || 'Pengguna',
     role: data.role as AppRole,
-    email: user.email || ''
+    username: data.username
   };
+}
+
+export async function createEmployeeAccount(input: EmployeeAccountInput): Promise<void> {
+  const client = requireSupabase();
+  const { data, error } = await client.functions.invoke('create-employee', { body: input });
+  if (error) {
+    let serverMessage = data?.message as string | undefined;
+    const response = (error as { context?: Response }).context;
+    if (!serverMessage && response) {
+      try {
+        const payload = await response.clone().json() as { message?: string };
+        serverMessage = payload.message;
+      } catch {
+        // Response non-JSON tetap dipetakan ke pesan aman di bawah.
+      }
+    }
+    throw new Error(serverMessage || 'Layanan akun tidak dapat dihubungi. Coba lagi atau periksa deployment Edge Function.');
+  }
+  if (!data?.ok) throw new Error(data?.message || 'Akun pegawai gagal dibuat.');
 }
 
 export async function loadWorkspace(profile: UserProfile, defaults: PackagingPrices): Promise<WorkspaceData> {

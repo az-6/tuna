@@ -7,6 +7,8 @@ Target: Vercel (frontend) dan Supabase (Auth + PostgreSQL)
 
 Temuan prioritas tinggi dari audit sebelumnya telah diimplementasikan pada jalur aplikasi utama. Ledger browser dan password HPP lokal diganti dengan Supabase Auth, penyimpanan PostgreSQL, RLS organisasi, dan peran `owner/manager/staff`. Status FINAL sekarang merupakan state persisten yang hanya dapat dibuat melalui prosedur finalisasi, bukan kesimpulan otomatis dari filter layar.
 
+Autentikasi pengguna kini hanya meminta username dan password. Supabase menerima alias identitas internal karena API password bawaannya memerlukan email/phone, tetapi alias tersebut bukan data pengguna, tidak dikumpulkan, tidak ditampilkan, dan tidak dipakai untuk komunikasi.
+
 ## Perubahan bisnis dan akuntansi
 
 1. Cakupan kalkulasi `DONE_ONLY` tidak lagi mengubah status batch menjadi FINAL bila masih ada ikan pending pada batch penuh.
@@ -26,6 +28,8 @@ Temuan prioritas tinggi dari audit sebelumnya telah diimplementasikan pada jalur
 - Audit trigger mencatat INSERT/UPDATE/DELETE; FINALIZE dan REOPEN memiliki event eksplisit.
 - Snapshot final menyimpan salinan input batch, finansial, ikan, dan master kemasan dari sisi database agar angka final dapat direproduksi setelah batch direopen.
 - Frontend hanya menerima publishable key; service-role key dilarang berada di browser.
+- Owner membuat akun staff melalui Edge Function terautentikasi; admin API dan secret key hanya berjalan di Supabase.
+- Password pegawai tidak disimpan pada tabel aplikasi atau audit log.
 - Vercel dilengkapi fallback SPA, cache aset immutable, CSP, anti-frame, MIME sniffing protection, dan permissions policy.
 
 ## Mobile-first dan UX
@@ -33,11 +37,15 @@ Temuan prioritas tinggi dari audit sebelumnya telah diimplementasikan pada jalur
 - Navigasi bawah tetap menjadi jalur utama pada layar kecil.
 - Target sentuh kritis minimum 44 px.
 - Layar autentikasi, loading, konfigurasi hilang, sinkronisasi, error/retry, empty state, status WIP/siap-final/FINAL, serta feedback permission tersedia.
+- Toolbar mobile dipisahkan dari desktop agar kontrol akun dan batch tidak overflow.
+- Form pegawai memiliki validasi, loading, error recovery, focus trap, dan pencegahan double-submit.
 - Staff mendapat form pemakaian kemasan khusus kuantitas tanpa membuka harga atau subtotal biaya.
 
 ## Artefak deployment
 
 - Migration: `supabase/migrations/202608230001_initial_production.sql`
+- Migration username/pegawai: `supabase/migrations/202608230002_username_employee_accounts.sql`
+- Edge Function: `supabase/functions/create-employee/index.ts`
 - Konfigurasi lokal Supabase: `supabase/config.toml`
 - Template environment: `.env.example`
 - Konfigurasi Vercel: `vercel.json`
@@ -45,6 +53,6 @@ Temuan prioritas tinggi dari audit sebelumnya telah diimplementasikan pada jalur
 
 ## Batas kesiapan
 
-Repository telah disiapkan untuk deployment, tetapi belum dapat dipasang ke proyek Supabase/Vercel nyata tanpa project ref, publishable key, dan otorisasi akun pemilik. Provisioning anggota organisasi juga sengaja belum tersedia di browser; gunakan alur administrator yang dijelaskan dalam runbook atau Edge Function server-side sebelum self-service invitation dibuka.
+Repository telah disiapkan untuk deployment, tetapi belum dapat dipasang ke proyek Supabase/Vercel nyata tanpa project ref, publishable key, dan otorisasi akun pemilik. Edge Function pembuatan pegawai harus dideploy dan `APP_ORIGINS` harus dikonfigurasi sebelum fitur dipakai di production.
 
 Migration diuji secara lokal melalui PGlite. Validasi terhadap Supabase hosted tetap menjadi gate sebelum go-live karena environment ini tidak memiliki kredensial proyek dan Docker daemon lokal tidak aktif.

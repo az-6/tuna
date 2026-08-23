@@ -2,6 +2,8 @@
 
 Aplikasi mobile-first untuk penerimaan ikan, meja potong, pemakaian kemasan, perhitungan HPP batch, analisis trace-and-allocate per grade, finalisasi, dan audit trail.
 
+Login memakai username dan password. Owner dapat membuat akun pegawai langsung dari aplikasi; akun tersebut otomatis mendapat role `staff` pada organisasi yang sama.
+
 ## Menjalankan lokal
 
 ```bash
@@ -14,6 +16,7 @@ Salin `.env.example` ke `.env.local` dan isi Project URL serta Publishable Key S
 
 ## Model akses
 
-- `owner` / `manager`: data biaya, HPP, pengaturan harga, finalisasi, reopen, dan penghapusan batch WIP.
+- `owner`: seluruh kontrol finansial serta pembuatan akun pegawai.
+- `manager`: data biaya, HPP, pengaturan harga, finalisasi, reopen, dan penghapusan batch WIP.
 - `staff`: penerimaan, hasil potong, dan kuantitas kemasan; tidak dapat membaca tabel finansial melalui RLS.
 - Batch `FINAL`: immutable pada sisi UI dan database sampai prosedur reopen dijalankan dengan alasan audit.

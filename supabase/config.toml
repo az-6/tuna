@@ -22,4 +22,8 @@ enable_signup = true
 [auth.email]
 enable_signup = true
 double_confirm_changes = true
-enable_confirmations = true
+enable_confirmations = false
+
+[functions.create-employee]
+# Autentikasi diverifikasi di dalam function agar kompatibel dengan signing key baru.
+verify_jwt = false

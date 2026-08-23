@@ -1,13 +1,14 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import type { BatchInfo, FishRecord, HppCalculationResult, LoinItem, PackagingPrices, UserProfile } from '../types';
+import type { BatchInfo, EmployeeAccountInput, FishRecord, HppCalculationResult, LoinItem, PackagingPrices, UserProfile } from '../types';
 import { getJakartaDateString } from '../utils/calculations';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import {
-  createBatch, createFish, finalizeBatchRecord, loadProfile, loadWorkspace,
+  createBatch, createEmployeeAccount, createFish, finalizeBatchRecord, loadProfile, loadWorkspace,
   removeAllWipBatches, removeBatch, removeFish, reopenBatchRecord,
   savePackagingPrices, updateBatchRecord, updateFish
 } from '../lib/repository';
+import { normalizeUsername, usernameToInternalEmail, validateUsername } from '../lib/username';
 
 type SyncState = 'idle' | 'loading' | 'saving' | 'error';
 
@@ -19,8 +20,9 @@ interface AppContextType {
   dataLoading: boolean;
   syncState: SyncState;
   syncMessage: string | null;
-  signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, displayName: string, organizationName: string) => Promise<string>;
+  signIn: (username: string, password: string) => Promise<void>;
+  signUp: (username: string, password: string, displayName: string, organizationName: string) => Promise<string>;
+  createEmployee: (input: EmployeeAccountInput) => Promise<void>;
   signOut: () => Promise<void>;
   retrySync: () => Promise<void>;
   canViewHpp: boolean;
@@ -181,23 +183,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [hydrate, session]);
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = async (username: string, password: string) => {
     if (!supabase) throw new Error('Supabase belum dikonfigurasi.');
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-    if (error) throw new Error(error.message);
+    const validationError = validateUsername(username);
+    if (validationError) throw new Error(validationError);
+    const { error } = await supabase.auth.signInWithPassword({
+      email: usernameToInternalEmail(username),
+      password
+    });
+    if (error) throw new Error('Username atau password salah. Periksa kembali lalu coba lagi.');
   };
 
-  const signUp = async (email: string, password: string, displayName: string, organizationName: string) => {
+  const signUp = async (username: string, password: string, displayName: string, organizationName: string) => {
     if (!supabase) throw new Error('Supabase belum dikonfigurasi.');
+    const normalizedUsername = normalizeUsername(username);
+    const validationError = validateUsername(normalizedUsername);
+    if (validationError) throw new Error(validationError);
+    if (password.length < 10 || password.length > 128) throw new Error('Password harus 10–128 karakter.');
+    if (displayName.trim().length < 2 || displayName.trim().length > 120) throw new Error('Nama pengguna harus 2–120 karakter.');
+    if (organizationName.trim().length < 2 || organizationName.trim().length > 120) throw new Error('Nama organisasi harus 2–120 karakter.');
     const { data, error } = await supabase.auth.signUp({
-      email: email.trim(),
+      email: usernameToInternalEmail(normalizedUsername),
       password,
-      options: { data: { display_name: displayName.trim(), organization_name: organizationName.trim() } }
+      options: {
+        data: {
+          username: normalizedUsername,
+          display_name: displayName.trim(),
+          organization_name: organizationName.trim()
+        }
+      }
     });
-    if (error) throw new Error(error.message);
-    return data.session
-      ? 'Akun berhasil dibuat dan Anda sudah masuk.'
-      : 'Akun berhasil dibuat. Periksa email untuk konfirmasi sebelum masuk.';
+    if (error) throw new Error(error.message.toLowerCase().includes('already')
+      ? 'Username sudah digunakan. Pilih username lain.'
+      : 'Akun owner gagal dibuat. Periksa data lalu coba lagi.');
+    if (!data.session) {
+      throw new Error('Konfirmasi email Supabase masih aktif. Nonaktifkan Confirm Email karena sistem ini memakai username.');
+    }
+    return 'Akun owner berhasil dibuat dan Anda sudah masuk.';
+  };
+
+  const createEmployee = async (input: EmployeeAccountInput) => {
+    if (profile?.role !== 'owner') throw new Error('Hanya owner dapat membuat akun pegawai.');
+    await runMutation(() => createEmployeeAccount(input), `Akun @${normalizeUsername(input.username)} berhasil dibuat.`);
   };
 
   const signOut = async () => {
@@ -296,7 +323,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   return (
     <AppContext.Provider value={{
       isConfigured: isSupabaseConfigured, session, profile, authLoading, dataLoading, syncState, syncMessage,
-      signIn, signUp, signOut, retrySync, canViewHpp, canManageFinancials,
+      signIn, signUp, createEmployee, signOut, retrySync, canViewHpp, canManageFinancials,
       batches, activeBatchId, setActiveBatchId, activeBatch, fishRecords, activeBatchFish,
       packagingPrices, updatePackagingPrices, activeTab, setActiveTab,
       showPackagingModal, openPackagingModal: () => setShowPackagingModal(true),

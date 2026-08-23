@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { getJakartaDateString } from '../utils/calculations';
-import { Fish, Inbox, Scissors, Calculator, Plus, RotateCcw, Ship, Lock, Package, LogOut } from 'lucide-react';
+import { Fish, Inbox, Scissors, Calculator, Plus, RotateCcw, Ship, Lock, Package, LogOut, UserPlus } from 'lucide-react';
+import { EmployeeAccountModal } from './EmployeeAccountModal';
 
 export const SimpleNavbar: React.FC = () => {
   const {
@@ -22,6 +23,7 @@ export const SimpleNavbar: React.FC = () => {
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showEmployeeModal, setShowEmployeeModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [nelayanName, setNelayanName] = useState('');
@@ -174,8 +176,16 @@ export const SimpleNavbar: React.FC = () => {
 
           {/* Top Actions: Nelayan Selector, Packaging Entry, & Tools */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => void signOut()}
+              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-slate-700 bg-slate-950 text-slate-300 sm:hidden focus-ring"
+              aria-label={`Keluar dari akun ${profile?.displayName || ''}`}
+            >
+              <LogOut className="h-4 w-4" aria-hidden="true" />
+            </button>
             {/* Quick Nelayan Switcher */}
-            <div className="relative flex items-center bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs min-h-[44px]">
+            <div className="relative hidden sm:flex items-center bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs min-h-[44px]">
               <Ship className="w-4 h-4 text-cyan-400 shrink-0 mr-1.5" aria-hidden="true" />
               <label htmlFor="batch-select" className="sr-only">Pilih Nelayan atau Batch</label>
               <select
@@ -196,13 +206,26 @@ export const SimpleNavbar: React.FC = () => {
             <button
               onClick={openPackagingModal}
               disabled={batches.length === 0}
-              className="flex items-center gap-1.5 px-3 py-2 bg-purple-950/80 hover:bg-purple-900 disabled:cursor-not-allowed disabled:opacity-40 text-purple-300 border border-purple-500/40 rounded-xl text-xs font-bold transition-all shadow-sm touch-manipulation focus-ring min-h-[44px]"
+              className="hidden sm:flex items-center gap-1.5 px-3 py-2 bg-purple-950/80 hover:bg-purple-900 disabled:cursor-not-allowed disabled:opacity-40 text-purple-300 border border-purple-500/40 rounded-xl text-xs font-bold transition-all shadow-sm touch-manipulation focus-ring min-h-[44px]"
               aria-label="Catat Pemakaian & Biaya Kemasan Batch"
               title="Catat Pemakaian & Biaya Kemasan Batch"
             >
               <Package className="w-4 h-4 text-purple-400" />
               <span className="hidden sm:inline">Kemasan</span>
             </button>
+
+            {profile?.role === 'owner' && (
+              <button
+                type="button"
+                onClick={() => setShowEmployeeModal(true)}
+                className="hidden sm:flex min-h-[44px] items-center gap-1.5 rounded-xl border border-cyan-500/40 bg-cyan-950/70 px-3 py-2 text-xs font-bold text-cyan-200 transition-colors hover:bg-cyan-900 focus-ring"
+                aria-label="Buat akun pegawai"
+                title="Buat akun pegawai"
+              >
+                <UserPlus className="h-4 w-4" aria-hidden="true" />
+                <span className="hidden lg:inline">Akun Pegawai</span>
+              </button>
+            )}
 
             {/* Add New Batch Button */}
             <button
@@ -213,7 +236,7 @@ export const SimpleNavbar: React.FC = () => {
                 setBatchCode(`BATCH-${getJakartaDateString().replace(/-/g, '')}-${String(batches.length + 1).padStart(2, '0')}`);
                 setShowAddModal(true);
               }}
-              className="flex items-center gap-1.5 px-3 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-40 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-cyan-600/30 touch-manipulation focus-ring min-h-[44px]"
+              className="hidden sm:flex items-center gap-1.5 px-3 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-40 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-cyan-600/30 touch-manipulation focus-ring min-h-[44px]"
               aria-label="Tambah Nelayan atau Kapal Baru"
             >
               <Plus className="w-4 h-4" />
@@ -225,7 +248,7 @@ export const SimpleNavbar: React.FC = () => {
               ref={resetTriggerRef}
               onClick={() => setShowResetConfirm(true)}
               disabled={!canManageFinancials || batches.every(batch => batch.lifecycleStatus === 'FINAL')}
-              className="p-2.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40 rounded-xl text-xs transition-colors touch-manipulation focus-ring min-h-[44px] min-w-[44px] flex items-center justify-center"
+              className="hidden sm:flex p-2.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40 rounded-xl text-xs transition-colors touch-manipulation focus-ring min-h-[44px] min-w-[44px] items-center justify-center"
               aria-label="Reset atau Kosongkan Data"
               title="Kosongkan Data"
             >
@@ -241,12 +264,36 @@ export const SimpleNavbar: React.FC = () => {
             >
               <span className="max-w-[110px] truncate">
                 <span className="block font-bold">{profile?.displayName || 'Pengguna'}</span>
-                <span className="block text-[10px] uppercase text-cyan-400">{profile?.role}</span>
+                <span className="block max-w-[110px] truncate text-[10px] text-cyan-400">@{profile?.username} · {profile?.role}</span>
               </span>
               <LogOut className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
 
+        </div>
+
+        {/* Mobile action bar keeps primary controls reachable without horizontal overflow. */}
+        <div className={`grid gap-1.5 pb-2.5 sm:hidden ${profile?.role === 'owner' ? 'grid-cols-[minmax(0,1fr)_44px_44px_44px]' : canManageFinancials ? 'grid-cols-[minmax(0,1fr)_44px_44px]' : 'grid-cols-[minmax(0,1fr)_44px]'}`}>
+          <div className="relative flex min-h-[44px] min-w-0 items-center rounded-xl border border-slate-700 bg-slate-950 px-2.5 text-xs">
+            <Ship className="me-1.5 h-4 w-4 shrink-0 text-cyan-400" aria-hidden="true" />
+            <label htmlFor="mobile-batch-select" className="sr-only">Pilih batch</label>
+            <select id="mobile-batch-select" value={activeBatchId} onChange={event => setActiveBatchId(event.target.value)} className="min-w-0 flex-1 truncate bg-transparent font-bold text-cyan-300 focus:outline-none">
+              {batches.map(batch => <option key={batch.id} value={batch.id} className="bg-slate-900 text-white">{batch.nelayan}</option>)}
+            </select>
+          </div>
+          <button type="button" onClick={openPackagingModal} disabled={!batches.length} className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-purple-500/40 bg-purple-950 text-purple-300 disabled:opacity-40 focus-ring" aria-label="Catat kemasan">
+            <Package className="h-4 w-4" />
+          </button>
+          {profile?.role === 'owner' ? (
+            <button type="button" onClick={() => setShowEmployeeModal(true)} className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-cyan-500/40 bg-cyan-950 text-cyan-200 focus-ring" aria-label="Buat akun pegawai">
+              <UserPlus className="h-4 w-4" />
+            </button>
+          ) : null}
+          {canManageFinancials ? (
+            <button type="button" onClick={() => { setNelayanName(''); setBatchCode(`BATCH-${getJakartaDateString().replace(/-/g, '')}-${String(batches.length + 1).padStart(2, '0')}`); setShowAddModal(true); }} className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl bg-cyan-600 text-white focus-ring" aria-label="Tambah batch">
+              <Plus className="h-4 w-4" />
+            </button>
+          ) : null}
         </div>
 
         {/* Desktop Step Navigation Tabs */}
@@ -427,6 +474,8 @@ export const SimpleNavbar: React.FC = () => {
           </div>
         </div>
       )}
+
+      <EmployeeAccountModal isOpen={showEmployeeModal} onClose={() => setShowEmployeeModal(false)} />
 
     </header>
   );
